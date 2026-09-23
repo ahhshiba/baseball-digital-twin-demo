@@ -1,3 +1,4 @@
+import { applyMounts } from './deployment.js';
 export const stages = [
   {id:'poc',name:'概念驗證',short:'P0',subtitle:'室內 · 幾何與同步驗證',description:'兩個相機視角驗證球心定位、時間同步與雷達速度。近攝模式只涵蓋局部，不代表可量進壘點。'},
   {id:'bullpen',name:'牛棚',short:'P1',subtitle:'牛棚 · 投球追蹤與 ABS 研究',description:'釋球端與本壘交叉視角，研究完整球路與訓練輔助判讀。轉速仍需另外驗證球縫解析度。'},
@@ -30,4 +31,4 @@ const full=[...pilot,
  n('cam-h','相機 H｜右外野','camera',[60,13,-83],[0,2,-48],'交叉守備視角；節點數量只是展示。','球員轨跡、遮擋與重識別信心'),
  n('lidar','光達｜人員研究','lidar',[0,6,14],[0,1,-24],'研究人員定位與靜態場地建模；一般掃描光達不保證能追棒球。','點雲、逐點時間戳、反射強度與外參'),
 ];
-export const getNodes=(stage,nearView)=>structuredClone(stage==='poc'?(nearView?near:plate):stage==='bullpen'?bullpen:stage==='pilot'?pilot:full);
+export const getNodes=(stage,nearView)=>applyMounts(structuredClone(stage==='poc'?(nearView?near:plate):stage==='bullpen'?bullpen:stage==='pilot'?pilot:full),stage,nearView);

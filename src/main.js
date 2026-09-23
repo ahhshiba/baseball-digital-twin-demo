@@ -22,7 +22,7 @@ $('#app').innerHTML=`<div class="app">
   <div class="main"><section class="viewport" aria-label="互動三維球場">
     <div id="scene"></div><div id="labels"></div>
     <div class="scene-caption"><span class="eyebrow">INTERACTIVE FIELD VIEW</span><strong id="scene-title"></strong><span>拖曳旋轉 · 滾輪縮放 · 點選感測器</span></div>
-    <div class="scene-options"><button id="light" title="切換日夜" aria-pressed="false">☀ 日間</button><button id="coverage" aria-pressed="false">視野示意</button><button id="labels-toggle" aria-pressed="true">設備標籤</button></div>
+    <div class="scene-options"><button id="light" title="切換日夜" aria-pressed="false">☀ 日間</button><button id="coverage" aria-pressed="false">視野示意</button><button id="clearance" aria-pressed="false">活動區界線</button><button id="labels-toggle" aria-pressed="true">設備標籤</button></div>
     <div class="scene-stamp">CONCEPT VENUE <span>1 unit = 1 m · 示意場地</span></div>
     <div class="live-strip"><div><small>球種 · 手選</small><strong id="hud-type"></strong></div><div><small>釋球速度 · 模擬</small><strong id="hud-speed"></strong></div><div><small>進壘點 x / 高度</small><strong id="hud-location"></strong></div></div>
     <div class="simulation" id="simulation" hidden><span>慢速回放</span><div class="progress"><div id="progress-fill"></div></div><b id="sim-event">釋球</b></div>
@@ -40,7 +40,7 @@ $('#app').innerHTML=`<div class="app">
       <div class="section-heading record-heading"><span>本機逐球記錄</span><small id="record-count"></small></div><div id="record-list"></div>
       <div class="export-row"><button id="export-json">匯出 JSON</button><button id="export-csv">匯出 CSV</button></div><p class="mini-note" id="storage-note"></p>
     </section>
-    <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="disclaimer">節點與視野為規劃示意，並非場勘結果。增加節點需改善交會角、遮擋或備援，且共用校正與時間基準。</div><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
+    <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="disclaimer">場內淨空：相機、雷達、機櫃與固定支架均配置於示意活動區外；界外區也可能是球員活動區。支架代表待場勘確認的剛性結構，不能固定在柔性網面。線材沿場外線槽，避免跨越動線。<br>點「活動區界線」查看範圍；綠色圓環為設備投影示意，不是核准安全距離。</div><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
     <section id="metrics-panel" hidden>${capabilityHTML()}</section>
     <section id="flow-panel" hidden><span class="eyebrow">FROM SENSORS TO INSIGHT</span><h2>可回放的資料流程</h2><p class="lead">每筆輸出都需保留來源、事件 ID、校正／模型版本與品質狀態。示範網站目前沒有硬體連線。</p>
       <div class="flow-list">
@@ -72,7 +72,7 @@ function renderStage(){
   document.querySelectorAll('[data-node]').forEach(b=>b.onclick=()=>{selected=b.dataset.node;field.select(selected);updateDetail()});
   field.rebuild(stage,site,nodes);field.setPitch(pitch);field.select(selected);updateDetail();
 }
-function updateDetail(){const n=nodes.find(n=>n.id===selected);if(!n)return;document.querySelectorAll('[data-node]').forEach(b=>b.classList.toggle('chosen',b.dataset.node===selected));$('#detail').innerHTML=`<div class="detail-title"><i style="--c:${colors[n.type]}"></i>${n.name}</div><dl><dt>用途與限制</dt><dd>${n.role}</dd><dt>必須保留的原始欄位</dt><dd>${n.raw}</dd><dt>示意位置（公尺）</dt><dd>x ${n.pos[0]} · 高 ${n.pos[1]} · z ${n.pos[2]}</dd></dl>`}
+function updateDetail(){const n=nodes.find(n=>n.id===selected);if(!n)return;document.querySelectorAll('[data-node]').forEach(b=>b.classList.toggle('chosen',b.dataset.node===selected));const range=Math.hypot(...n.pos.map((v,i)=>v-n.target[i]));$('#detail').innerHTML=`<div class="detail-title"><i style="--c:${colors[n.type]}"></i>${n.name}</div><dl><dt>安裝位置</dt><dd>${n.place}。${n.mountKind==='cabinet'?'場外機櫃':'短支架固定；場內無落地脚架'}。</dd><dt>移位後的量測取捨</dt><dd>${n.tradeoff}</dd><dt>用途與限制</dt><dd>${n.role}</dd><dt>必須保留的原始欄位</dt><dd>${n.raw}</dd><dt>示意位置（公尺）</dt><dd>x ${n.pos[0]} · 高 ${n.pos[1]} · z ${n.pos[2]}<br>至觀測目標約 ${range.toFixed(1)} m；至活動區邊界約 ${n.clearanceM.toFixed(1)} m（中心點距離，非安全驗收）。</dd></dl>`}
 
 const callText={STRIKE:'示範好球',BALL:'示範壞球',REVIEW:'待覆核'};
 function updatePitch(){stopPlayback();pitch=makePitch(type,scenario,heightCm);field.setPitch(pitch);renderPitch()}
@@ -101,6 +101,7 @@ $('#height').onchange=e=>{heightCm=Math.max(140,Math.min(220,Number(e.target.val
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>field.setView(b.dataset.view));
 $('#light').onclick=()=>{field.setLight(!field.night);$('#light').textContent=field.night?'☾ 夜間':'☀ 日間';$('#light').setAttribute('aria-pressed',field.night)};
 $('#coverage').onclick=()=>{field.showCoverage=!field.showCoverage;field.fovs.visible=field.showCoverage;$('#coverage').setAttribute('aria-pressed',field.showCoverage)};
+$('#clearance').onclick=()=>{field.clearanceGroup.visible=!field.clearanceGroup.visible;$('#clearance').setAttribute('aria-pressed',field.clearanceGroup.visible)};
 $('#labels-toggle').onclick=()=>{field.showLabels=!field.showLabels;$('#labels-toggle').setAttribute('aria-pressed',field.showLabels)};
 function stopPlayback(){playing=false;$('#play').disabled=false;$('#play').textContent='▶ 投一球並記錄';$('#simulation').hidden=true}
 $('#play').onclick=()=>{playing=true;startTime=performance.now();playPitch=pitch;playStage=stage;$('#play').disabled=true;$('#play').textContent='投球回放中…';$('#simulation').hidden=false;$('#progress-fill').style.width='0%'};

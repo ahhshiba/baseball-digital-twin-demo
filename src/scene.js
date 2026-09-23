@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { colors } from './nodes.js';
 import { PLATE, BALL_RADIUS, positionAt } from './pitch.js';
+import { activityBoundary } from './deployment.js';
 
 export class FieldScene {
   constructor(host, labels, onSelect) {
@@ -19,6 +20,7 @@ export class FieldScene {
     this.sun.shadow.bias=-.0003;this.sun.shadow.normalBias=.025;this.scene.add(this.sun);
     this.root=new THREE.Group();this.scene.add(this.root);this.fx=new THREE.Group();this.scene.add(this.fx);
     this.fovs=new THREE.Group();this.scene.add(this.fovs);this.zoneGroup=new THREE.Group();this.scene.add(this.zoneGroup);
+    this.clearanceGroup=new THREE.Group();this.scene.add(this.clearanceGroup);this.clearanceGroup.visible=false;
     this.grass=this.texture('grass');this.dirt=this.texture('dirt');this.netTexture=this.texture('net');
     this.ball=new THREE.Mesh(new THREE.SphereGeometry(BALL_RADIUS,20,12),this.material('#f9f2e3'));
     const seamMat=new THREE.LineBasicMaterial({color:'#b72825'});
@@ -153,10 +155,17 @@ export class FieldScene {
       for(let y=-.2;y<.25;y+=.08)this.box(.35,.02,.025,'#263b3e',[0,y,.19],g);
       this.box(.04,.04,.02,'#b8ffb4',[.12,.25,.19],g);
     }else{this.box(.21,.14,.035,'#edf0e9',[0,0,.23],g)}
-    if(n.type==='edge'){this.box(.8,.10,.65,'#6e7771',[n.pos[0],.08,n.pos[2]])}
+    if(n.mountKind==='cabinet'){
+      this.box(.65,.8,.55,'#607777',[n.pos[0],.45,n.pos[2]]);
+    }
     else{
-      this.rod([n.pos[0],.2,n.pos[2]],n.pos,.027,'#bdc3bd');
-      if(n.pos[1]<5)for(let i=0;i<3;i++){const a=i*Math.PI*2/3;this.rod([n.pos[0],.7,n.pos[2]],[n.pos[0]+Math.sin(a)*.42,.03,n.pos[2]+Math.cos(a)*.42],.023,'#8e9c9c')}
+      // Existing structure is schematic; all columns and brackets remain outside
+      // the activity boundary. No sensor tripod or mast stands on the playing surface.
+      const [ax,ay,az]=n.anchor;
+      this.box(.24,ay+.45,.24,'#667d81',[ax,(ay+.45)/2,az]);
+      this.box(.45,.28,.14,'#869b9c',n.anchor);
+      this.rod(n.anchor,n.pos,.036,'#bac4c2');
+      this.line([[ax,.08,az],[ax,ay,az]],'#7dc5b6',this.root,.35);
       const o=new THREE.Vector3(...n.pos),t=new THREE.Vector3(...n.target),d=t.clone().sub(o),len=d.length();
       if(n.type==='camera'){
         const right=new THREE.Vector3().crossVectors(d.clone().normalize(),new THREE.Vector3(0,1,0)).normalize(),up=new THREE.Vector3().crossVectors(right,d.clone().normalize()).normalize();
@@ -176,8 +185,14 @@ export class FieldScene {
     group.clear();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());
   }
   rebuild(stage,site,nodes){
-    this.stage=stage;this.site=site;this.nodes=nodes;this.picks=[];this.clear(this.root);this.clear(this.fovs);this.labels.innerHTML='';
-    this.drawField();nodes.forEach(n=>this.device(n));this.fovs.visible=this.showCoverage;this.select(this.selected);this.setView('angle');
+    this.stage=stage;this.site=site;this.nodes=nodes;this.picks=[];this.clear(this.root);this.clear(this.fovs);this.clear(this.clearanceGroup);this.labels.innerHTML='';
+    this.drawField();nodes.forEach(n=>this.device(n));
+    const boundary=activityBoundary(stage),points=[...boundary,boundary[0]].map(([x,z])=>[x,.12,z]);
+    this.line(points,'#85ffce',this.clearanceGroup);
+    for(const n of nodes){
+      const ring=this.mesh(new THREE.RingGeometry(.65,.72,32),new THREE.MeshBasicMaterial({color:'#85ffce',side:THREE.DoubleSide,transparent:true,opacity:.85}),[n.pos[0],.12,n.pos[2]],this.clearanceGroup);ring.rotation.x=-Math.PI/2;
+    }
+    this.fovs.visible=this.showCoverage;this.select(this.selected);this.setView('angle');
   }
   select(id){this.selected=id;for(const n of this.nodes){n.body.material.emissive.set(n.id===id?colors[n.type]:'#000000');n.body.material.emissiveIntensity=.32;n.pin.classList.toggle('selected',n.id===id)}}
   setLight(night){this.night=night;const sky=night?'#152a41':'#abc3ce';this.scene.background=new THREE.Color(sky);this.scene.fog=new THREE.Fog(sky,170,470);this.ambient.intensity=night?.85:2.1;this.sun.intensity=night?1.8:3.2;this.sun.color.set(night?'#b5d9ff':'#fff0d6');this.renderer.toneMappingExposure=night?.95:1.1}

@@ -10,6 +10,12 @@ const url=process.env.DEMO_URL||'http://127.0.0.1:5174/baseball-digital-twin-dem
 await mkdir('artifacts',{recursive:true});
 try {
   await page.goto(url);await page.waitForSelector('#scene canvas');await page.waitForFunction(()=>document.querySelector('#hud-type')?.textContent.includes('FF'));
+  await page.locator('#clearance').click();assert.equal(await page.locator('#clearance').getAttribute('aria-pressed'),'true');
+  await page.locator('[data-panel="nodes"]').click();await page.locator('[data-node="cam-c"]').click();
+  assert.ok((await page.locator('#detail').textContent()).includes('三壘側看台'));
+  assert.ok((await page.locator('#detail').textContent()).includes('x -32'));
+  await page.screenshot({path:'artifacts/perimeter-mounts.png'});
+  await page.locator('[data-panel="dashboard"]').click();await page.locator('#clearance').click();
   await page.screenshot({path:'artifacts/stadium.png'});
   await page.locator('[data-view="plate"]').click();await page.screenshot({path:'artifacts/plate.png'});
   for(const stage of ['poc','bullpen','pilot','full']){
