@@ -18,14 +18,27 @@ try {
   await page.locator('[data-panel="dashboard"]').click();await page.locator('#clearance').click();
   await page.screenshot({path:'artifacts/stadium.png'});
   await page.locator('[data-view="plate"]').click();await page.screenshot({path:'artifacts/plate.png'});
+  const beforeMetrics=await page.locator('#pitch-metrics').textContent();
+  await page.locator('#ghost-actors').click();assert.equal(await page.locator('#ghost-actors').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('#scene').getAttribute('data-pitcher-opacity'),'0.25');assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.25');
+  await page.screenshot({path:'artifacts/plate-ghost.png'});
+  await page.locator('#actor-filter-options summary').click();await page.locator('#fade-pitcher').uncheck();
+  assert.equal(await page.locator('#scene').getAttribute('data-pitcher-opacity'),'1');assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.25');
+  assert.equal(await page.locator('#ghost-actors').getAttribute('aria-pressed'),'mixed');
+  await page.locator('#actor-opacity').fill('40');assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.4');
+  await page.locator('#actor-filter-options summary').click();
+  await page.locator('#ghost-actors').click();assert.equal(await page.locator('#scene').getAttribute('data-pitcher-opacity'),'0.4');
+  assert.equal(await page.locator('#pitch-metrics').textContent(),beforeMetrics);
   for(const stage of ['poc','bullpen','pilot','full']){
     await page.locator(`[data-stage="${stage}"]`).click();
     assert.ok(await page.locator('#node-list .node').count()>=5);
+    assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.4');
     if(stage==='poc'){
       await page.locator('[data-site="lab"]').click();await page.locator('[data-scene="near"]').click();
       await page.screenshot({path:'artifacts/lab.png'});
     }
   }
+  await page.locator('#ghost-actors').click();assert.equal(await page.locator('#scene').getAttribute('data-pitcher-opacity'),'1');assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'1');
   await page.locator('#light').click();await page.locator('#coverage').click();
   await page.screenshot({path:'artifacts/night.png'});
   await page.locator('#light').click();await page.locator('#coverage').click();
@@ -50,6 +63,9 @@ try {
   await page.locator('[data-panel="flow"]').click();assert.equal(await page.locator('.flow-list>div').count(),5);
   await page.locator('[data-panel="dashboard"]').click();
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/mobile.png',fullPage:true});
+  await page.locator('#ghost-actors').click();assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.25');
+  await page.locator('#actor-filter-options summary').click();await page.screenshot({path:'artifacts/mobile-filters.png'});
+  const filterBox=await page.locator('.actor-filter-body').boundingBox();assert.ok(filterBox.x>=0&&filterBox.x+filterBox.width<=390,'mobile filter controls must not be clipped');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:true,url,scenarios:4,stages:4,downloads:['JSON','CSV'],browserErrors:errors,mobileOverflow:false}));

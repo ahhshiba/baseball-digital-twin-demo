@@ -1,5 +1,6 @@
 import './style.css';
 import './workbench.css';
+import './actor-controls.css';
 import { stages, colors, typeNames, getNodes } from './nodes.js';
 import { PITCHES, PLATE, BALL_RADIUS, makePitch, makeRecord } from './pitch.js';
 import { capabilityHTML } from './capabilities.js';
@@ -23,6 +24,8 @@ $('#app').innerHTML=`<div class="app">
     <div id="scene"></div><div id="labels"></div>
     <div class="scene-caption"><span class="eyebrow">INTERACTIVE FIELD VIEW</span><strong id="scene-title"></strong><span>拖曳旋轉 · 滾輪縮放 · 點選感測器</span></div>
     <div class="scene-options"><button id="light" title="切換日夜" aria-pressed="false">☀ 日間</button><button id="coverage" aria-pressed="false">視野示意</button><button id="clearance" aria-pressed="false">活動區界線</button><button id="labels-toggle" aria-pressed="true">設備標籤</button></div>
+    <div class="actor-tools"><button id="ghost-actors" aria-pressed="false" title="一鍵切換投手與捕手半透明">◉ 投捕手半透明</button><details id="actor-filter-options"><summary>過濾設定</summary><div class="actor-filter-body"><label><input type="checkbox" id="fade-pitcher">投手半透明</label><label><input type="checkbox" id="fade-catcher">捕手半透明</label><label class="opacity-control" for="actor-opacity">人物不透明度 <output id="opacity-value">25%</output></label><input id="actor-opacity" type="range" min="10" max="60" step="5" value="25"><small>僅影響畫面，球路與記錄不變。</small></div></details></div>
+    <div id="filter-status" class="filter-status" hidden aria-live="polite"></div>
     <div class="scene-stamp">CONCEPT VENUE <span>1 unit = 1 m · 示意場地</span></div>
     <div class="live-strip"><div><small>球種 · 手選</small><strong id="hud-type"></strong></div><div><small>釋球速度 · 模擬</small><strong id="hud-speed"></strong></div><div><small>進壘點 x / 高度</small><strong id="hud-location"></strong></div></div>
     <div class="simulation" id="simulation" hidden><span>慢速回放</span><div class="progress"><div id="progress-fill"></div></div><b id="sim-event">釋球</b></div>
@@ -102,6 +105,17 @@ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>field.setView(
 $('#light').onclick=()=>{field.setLight(!field.night);$('#light').textContent=field.night?'☾ 夜間':'☀ 日間';$('#light').setAttribute('aria-pressed',field.night)};
 $('#coverage').onclick=()=>{field.showCoverage=!field.showCoverage;field.fovs.visible=field.showCoverage;$('#coverage').setAttribute('aria-pressed',field.showCoverage)};
 $('#clearance').onclick=()=>{field.clearanceGroup.visible=!field.clearanceGroup.visible;$('#clearance').setAttribute('aria-pressed',field.clearanceGroup.visible)};
+function syncActorControls(){
+  const {pitcher,catcher}=field.actorFilters,both=pitcher&&catcher,any=pitcher||catcher;
+  $('#ghost-actors').setAttribute('aria-pressed',both?'true':any?'mixed':'false');
+  $('#ghost-actors').textContent=both?'◉ 恢復投捕手實體':'◉ 投捕手半透明';
+  $('#fade-pitcher').checked=pitcher;$('#fade-catcher').checked=catcher;
+  $('#opacity-value').textContent=`${Math.round(field.ghostOpacity*100)}%`;
+  $('#filter-status').hidden=!any;$('#filter-status').textContent=`${[pitcher?'投手':'',catcher?'捕手':''].filter(Boolean).join('＋')}半透明 · 球路保持顯示`;
+}
+$('#ghost-actors').onclick=()=>{const enabled=!(field.actorFilters.pitcher&&field.actorFilters.catcher);field.setActorFilter('pitcher',enabled);field.setActorFilter('catcher',enabled);syncActorControls()};
+for(const role of ['pitcher','catcher'])$(`#fade-${role}`).onchange=e=>{field.setActorFilter(role,e.target.checked);syncActorControls()};
+$('#actor-opacity').oninput=e=>{field.setGhostOpacity(Number(e.target.value)/100);syncActorControls()};
 $('#labels-toggle').onclick=()=>{field.showLabels=!field.showLabels;$('#labels-toggle').setAttribute('aria-pressed',field.showLabels)};
 function stopPlayback(){playing=false;$('#play').disabled=false;$('#play').textContent='▶ 投一球並記錄';$('#simulation').hidden=true}
 $('#play').onclick=()=>{playing=true;startTime=performance.now();playPitch=pitch;playStage=stage;$('#play').disabled=true;$('#play').textContent='投球回放中…';$('#simulation').hidden=false;$('#progress-fill').style.width='0%'};

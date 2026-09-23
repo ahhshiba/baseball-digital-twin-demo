@@ -3,10 +3,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { colors } from './nodes.js';
 import { PLATE, BALL_RADIUS, positionAt } from './pitch.js';
 import { activityBoundary } from './deployment.js';
+import { makeAthlete } from './actors.js';
+import { setActorOpacity } from './actor-visibility.js';
 
 export class FieldScene {
   constructor(host, labels, onSelect) {
     this.host=host;this.labels=labels;this.onSelect=onSelect;this.nodes=[];this.picks=[];
+    this.actors=[];this.actorFilters={pitcher:false,catcher:false};this.ghostOpacity=.25;
     this.scene=new THREE.Scene();this.camera=new THREE.PerspectiveCamera(46,1,.2,550);
     this.renderer=new THREE.WebGLRenderer({antialias:true});this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
     this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -17,7 +20,13 @@ export class FieldScene {
     this.ambient=new THREE.HemisphereLight('#daeaff','#445639',2.1);this.scene.add(this.ambient);
     this.sun=new THREE.DirectionalLight('#fff0d6',3.2);this.sun.position.set(-42,65,26);this.sun.castShadow=true;
     this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-65,right:65,top:55,bottom:-90,near:.5,far:230});
-    this.sun.shadow.bias=-.0003;this.sun.shadow.normalBias=.025;this.scene.add(this.sun);
+    this.sun.shadow.bias=-.00015;this.sun.shadow.normalBias=.018;this.scene.add(this.sun);
+    this.fill=new THREE.DirectionalLight('#c9e2ed',.55);this.fill.position.set(36,24,-60);this.scene.add(this.fill);
+    this.sky=new THREE.Mesh(new THREE.SphereGeometry(440,24,16),new THREE.ShaderMaterial({
+      uniforms:{top:{value:new THREE.Color('#779eb8')},bottom:{value:new THREE.Color('#d4dedc')}},
+      vertexShader:'varying vec3 vDir; void main(){vDir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader:'uniform vec3 top;uniform vec3 bottom;varying vec3 vDir;void main(){float t=smoothstep(-0.12,0.85,normalize(vDir).y);gl_FragColor=vec4(mix(bottom,top,t),1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}',
+      side:THREE.BackSide,depthWrite:false,depthTest:false}));this.sky.renderOrder=-10;this.scene.add(this.sky);
     this.root=new THREE.Group();this.scene.add(this.root);this.fx=new THREE.Group();this.scene.add(this.fx);
     this.fovs=new THREE.Group();this.scene.add(this.fovs);this.zoneGroup=new THREE.Group();this.scene.add(this.zoneGroup);
     this.clearanceGroup=new THREE.Group();this.scene.add(this.clearanceGroup);this.clearanceGroup.visible=false;
@@ -41,14 +50,14 @@ export class FieldScene {
     new ResizeObserver(()=>{const w=host.clientWidth,h=host.clientHeight;this.camera.aspect=w/h;this.camera.updateProjectionMatrix();this.renderer.setSize(w,h)}).observe(host);
     this.setLight(false);this.frame=this.frame.bind(this);requestAnimationFrame(this.frame);
   }
-  material(color,map=null){return new THREE.MeshStandardMaterial({color,map,roughness:.88})}
+  material(color,map=null){return new THREE.MeshStandardMaterial({color,map,roughness:.94,bumpMap:map,bumpScale:map?.012:0})}
   texture(kind){
     const c=document.createElement('canvas');c.width=c.height=kind==='net'?64:512;const ctx=c.getContext('2d');
     let seed=12345;const rnd=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
     if(kind==='net'){ctx.clearRect(0,0,64,64);ctx.strokeStyle='rgba(125,143,148,.65)';ctx.lineWidth=1.4;ctx.strokeRect(0,0,64,64)}
     else {ctx.fillStyle=kind==='grass'?'#567a40':'#b88865';ctx.fillRect(0,0,512,512);for(let i=0;i<24000;i++){ctx.fillStyle=kind==='grass'?`rgba(${50+rnd()*85},${80+rnd()*80},${25+rnd()*40},.22)`:`rgba(${105+rnd()*100},${65+rnd()*85},${35+rnd()*70},.2)`;ctx.fillRect(rnd()*512,rnd()*512,kind==='grass'?1:2,kind==='grass'?4:2)}}
     const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
-    tex.repeat.set(kind==='net'?1:kind==='grass'?35:4,kind==='net'?1:kind==='grass'?35:4);tex.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());return tex;
+    tex.repeat.set(kind==='net'?1:kind==='grass'?.45:1.4,kind==='net'?1:kind==='grass'?.45:1.4);tex.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());return tex;
   }
   mesh(geo,mat,pos,parent=this.root){const o=new THREE.Mesh(geo,mat);o.position.set(...pos);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o}
   box(w,h,d,color,pos,parent=this.root){return this.mesh(new THREE.BoxGeometry(w,h,d),this.material(color),pos,parent)}
@@ -71,17 +80,18 @@ export class FieldScene {
   drawField(){
     const isField=['pilot','full'].includes(this.stage),lab=this.stage==='poc'&&this.site==='lab';
     if(isField){
-      this.patch([[-145,45],[145,45],[145,-145],[-145,-145]],'#677961',-.12);
+      this.disk(600,'#ccd6bb',0,-42,-.12,this.grass);
       for(let i=0;i<15;i++)this.arcPatch(i*7.35,(i+1)*7.35,-Math.PI/4,Math.PI/4,i%2?'#527e45':'#619052',.004);
       // Apply texture to individual bands; avoid overlapping transparent ground planes.
-      for(const band of this.root.children.slice(-15)){band.material.map=this.grass;band.material.color.set(band.material.color.getHex()===0x527e45?'#dce9cb':'#ffffff')}
+      for(const band of this.root.children.slice(-15)){band.material.map=this.grass;band.material.bumpMap=this.grass;band.material.bumpScale=.012;band.material.color.set(band.material.color.getHex()===0x527e45?'#bdcfb1':'#e1e8cb')}
+      this.arcPatch(125,137,-Math.PI/4-.10,Math.PI/4+.10,'#89918b',.015);
       this.arcPatch(105,111,-Math.PI/4,Math.PI/4,'#ad8262',.014);
       this.disk(27.4,'#dcc09e',0,-18.44,.018,this.dirt);
       this.patch([[0,-4.4],[15.5,-19.4],[0,-34.4],[-15.5,-19.4]],'#eef4d7',.045,this.grass);
       const side=27.432/Math.sqrt(2);
       for(const [x,z] of [[side,-side],[0,-2*side],[-side,-side]]){this.disk(2.25,'#d4b18a',x,z,.035,this.dirt);const base=this.box(.4572,.075,.4572,'#eeeada',[x,.09,z]);base.rotation.y=Math.PI/4}
       for(const s of [-1,1]){
-        this.rod([s*.08,.042,-.08],[s*78.49,.042,-78.49],.033,'#f9f3df');
+        this.patch([[s*.05,-.05],[s*78.52,-78.52],[s*78.47,-78.57],[s*.00,-.10]],'#eee8d6',.061);
         this.rod([s*78.49,0,-78.49],[s*78.49,15,-78.49],.10,'#efc651');
         const boxX=s*7.8;this.line([[boxX,.05,-7],[boxX+s*2,.05,-9],[boxX+s*7,.05,-14],[boxX+s*5,.05,-12],[boxX,.05,-7]],'#eee9d5');
       }
@@ -91,19 +101,26 @@ export class FieldScene {
       }
       for(let row=0;row<9;row++){
         this.arcPatch(113+row*1.25,114+row*1.25,-Math.PI/4-.08,Math.PI/4+.08,row%2?'#84939c':'#a9b0ae',.5+row*.62);
-        const count=140,geo=new THREE.BoxGeometry(.67,.4,.6),mat=this.material(row%3===0?'#395c72':'#597784');const chairs=new THREE.InstancedMesh(geo,mat,count);const dummy=new THREE.Object3D();
-        for(let j=0;j<count;j++){const a=-Math.PI/4-.07+(Math.PI/2+.14)*j/(count-1),r=113.5+row*1.25;dummy.position.set(Math.sin(a)*r,1+row*.62,-Math.cos(a)*r);dummy.rotation.y=-a;dummy.updateMatrix();chairs.setMatrixAt(j,dummy.matrix)}this.root.add(chairs);
+        const count=140,geo=new THREE.BoxGeometry(.67,.13,.6),mat=this.material(row%3===0?'#294f62':'#4d7587');const chairs=new THREE.InstancedMesh(geo,mat,count),backs=new THREE.InstancedMesh(new THREE.BoxGeometry(.67,.57,.10),mat,count);const dummy=new THREE.Object3D();
+        for(let j=0;j<count;j++){const a=-Math.PI/4-.07+(Math.PI/2+.14)*j/(count-1),r=113.5+row*1.25;dummy.scale.setScalar(j%20===0?.001:1);dummy.position.set(Math.sin(a)*r,1+row*.62,-Math.cos(a)*r);dummy.rotation.y=-a;dummy.updateMatrix();chairs.setMatrixAt(j,dummy.matrix);dummy.position.set(Math.sin(a)*(r+.25),1.26+row*.62,-Math.cos(a)*(r+.25));dummy.updateMatrix();backs.setMatrixAt(j,dummy.matrix)}this.root.add(chairs,backs);
       }
       // Low grandstands and dugouts along both foul sides.
       for(const s of [-1,1]){
         const stands=new THREE.Group();stands.position.set(s*25,0,-11);stands.rotation.y=s*Math.PI/4;this.root.add(stands);
-        for(let row=0;row<7;row++)this.box(30,.5,1.25,row%2?'#638091':'#8e9da4',[0,.5+row*.6,row*1.3],stands);
+        for(let row=0;row<7;row++){
+          this.box(30,.5,1.25,'#99a4a2',[0,.5+row*.6,row*1.3],stands);
+          const material=this.material(row%2?'#315b6f':'#53798b'),seats=new THREE.InstancedMesh(new THREE.BoxGeometry(.67,.12,.60),material,32),backs=new THREE.InstancedMesh(new THREE.BoxGeometry(.67,.55,.09),material,32),dummy=new THREE.Object3D();
+          for(let seat=0;seat<32;seat++){dummy.scale.setScalar(seat%11===0?.001:1);dummy.position.set(-14+seat*.87,.89+row*.6,row*1.3);dummy.updateMatrix();seats.setMatrixAt(seat,dummy.matrix);dummy.position.set(-14+seat*.87,1.18+row*.6,row*1.3+.25);dummy.updateMatrix();backs.setMatrixAt(seat,dummy.matrix)}stands.add(seats,backs);
+        }
+        this.rod([-15,5.6,8.5],[15,5.6,8.5],.04,'#afbcbb',stands);
+        for(const x of [-15,-7,0,7,15])this.rod([x,4.4,8.5],[x,5.6,8.5],.035,'#afbcbb',stands);
         this.box(12,2.4,.3,'#31545a',[s*14,1.2,-7]);this.box(12,.18,3,'#879b9b',[s*14,2.45,-5.6]);this.box(10,.18,.6,'#a68a64',[s*14,.6,-6]);
       }
       this.textSign('FIELD LAB  /  DIGITAL TWIN',26,5,[0,10,-112]);this.textSign('110 m',5,1.5,[0,1.8,-110.65]);
+      for(const [a,text] of [[-.5,'HOME CLUB'],[.5,'VISITOR CLUB']])this.textSign(text,13,1.8,[Math.sin(a)*110.6,1.7,-Math.cos(a)*110.6],-a);
       for(const [x,z] of [[-68,-38],[68,-38],[-38,-112],[38,-112]]){
         this.rod([x,0,z],[x,29,z],.22,'#9eabad');this.box(5,1.8,.5,'#cad5cf',[x,29,z]);
-        const bulbs=this.box(4.6,1.4,.08,'#fff6d7',[x,29,z+.28]);bulbs.material.emissive=new THREE.Color('#fff0c9');bulbs.material.emissiveIntensity=1;
+        for(let col=0;col<8;col++)for(let row=0;row<2;row++){const bulbs=this.box(.43,.48,.08,'#fff6d7',[x-2+col*.57,28.65+row*.72,z+.28]);bulbs.material.emissive=new THREE.Color('#fff0c9');bulbs.material.emissiveIntensity=1.2}
       }
       this.net([-9,5],[9,5],5);this.net([-9,5],[-15,-4],5);this.net([9,5],[15,-4],5);
       if(this.stage==='full')for(const [i,x,z] of [[3,18,-23],[4,11,-35],[5,-19,-24],[6,-12,-34],[7,-36,-66],[8,0,-84],[9,36,-66]])this.player([x,0,z],'fielder',i);
@@ -127,29 +144,26 @@ export class FieldScene {
     if(isField)this.player([-.95,0,-.2],'batter',8);
   }
   player(pos,role,num){
-    const g=new THREE.Group();g.position.set(...pos);this.root.add(g);const crouch=role==='catcher';
-    const hips=crouch?.48:.94,shoulder=crouch?.92:1.45;const kit=role==='batter'?'#c3a477':'#f0e8d4',dark='#234758',skin='#c89571';
-    this.mesh(new THREE.CylinderGeometry(.19,.16,shoulder-hips,12),this.material(kit),[0,(shoulder+hips)/2,0],g);
-    this.mesh(new THREE.CylinderGeometry(.055,.06,.16,10),this.material(skin),[0,shoulder+.055,0],g);
-    this.mesh(new THREE.SphereGeometry(.13,14,10),this.material(skin),[0,shoulder+.2,crouch?-.05:0],g);
-    this.mesh(new THREE.SphereGeometry(.142,12,8,0,Math.PI*2,0,Math.PI/2),this.material(dark),[0,shoulder+.23,0],g);
-    for(const s of [-1,1]){
-      const knee=[s*(crouch?.27:.12),crouch?.22:.48,crouch?-.22:0],foot=[s*.19,.08,.12];
-      this.rod([s*.1,hips,0],knee,.085,kit,g);this.rod(knee,foot,.065,kit,g);this.box(.13,.1,.25,dark,[foot[0],.055,foot[2]+.05],g);
-      const elbow=[s*.3,shoulder-.25,role==='pitcher'?.18:-.14],hand=[s*.15,shoulder-.2,role==='pitcher'?.4:-.38];
-      this.rod([s*.2,shoulder-.06,0],elbow,.057,kit,g);this.rod(elbow,hand,.05,skin,g);
-      if(s===-1)this.mesh(new THREE.SphereGeometry(.10,10,8),this.material('#9c643b'),hand,g);
-    }
-    if(crouch){this.box(.30,.34,.07,dark,[0,.8,-.17],g);for(let y=.93;y<1.18;y+=.055)this.rod([-.13,y,-.18],[.13,y,-.18],.008,'#9ba7a3',g)}
-    if(role==='batter')this.rod([.14,1.15,-.3],[.43,1.95,-.4],.033,'#c99455',g);
-    g.userData={role,num};if(role==='pitcher')this.pitcher=g;
+    const g=makeAthlete(role,num);g.position.set(...pos);this.root.add(g);this.actors.push(g);
+    const originals=new Set();g.traverse(o=>{if(o.isMesh)for(const m of Array.isArray(o.material)?o.material:[o.material])originals.add(m)});
+    setActorOpacity(g,this.actorFilters[role]?this.ghostOpacity:1);originals.forEach(m=>m.dispose());
+    if(role==='pitcher')this.pitcher=g;
+    return g;
+  }
+  setActorFilter(role,enabled){this.actorFilters[role]=Boolean(enabled);this.applyActorFilters()}
+  setGhostOpacity(value){this.ghostOpacity=Math.max(.1,Math.min(.6,Number(value)||.25));this.applyActorFilters()}
+  applyActorFilters(){
+    for(const actor of this.actors)setActorOpacity(actor,this.actorFilters[actor.userData.role]?this.ghostOpacity:1);
+    for(const role of ['pitcher','catcher'])this.host.dataset[`${role}Opacity`]=String(this.actors.find(a=>a.userData.role===role)?.userData.displayOpacity??1);
   }
   device(n){
     const g=new THREE.Group();g.position.set(...n.pos);g.lookAt(new THREE.Vector3(...n.target));this.root.add(g);
     const c=colors[n.type],body=this.box(n.type==='edge'?.48:.28,n.type==='edge'?.64:.19,n.type==='edge'?.35:.42,c,[0,0,0],g);
     body.material.roughness=.38;body.material.metalness=.25;body.userData.id=n.id;this.picks.push(body);n.body=body;
     if(n.type==='camera'){
+      this.box(.32,.035,.49,'#adb9b5',[0,.115,.035],g);
       const lens=this.mesh(new THREE.CylinderGeometry(.068,.068,.2,20),this.material('#1b252e'),[0,0,.28],g);lens.rotation.x=Math.PI/2;
+      this.mesh(new THREE.TorusGeometry(.067,.008,8,20),this.material('#6d838b'),[0,0,.385],g);
       const glass=this.mesh(new THREE.CircleGeometry(.061,20),new THREE.MeshStandardMaterial({color:'#426b83',metalness:.8,roughness:.1}),[0,0,.385],g);glass.userData.id=n.id;this.picks.push(glass);
     }else if(n.type==='edge'){
       for(let y=-.2;y<.25;y+=.08)this.box(.35,.02,.025,'#263b3e',[0,y,.19],g);
@@ -164,6 +178,7 @@ export class FieldScene {
       const [ax,ay,az]=n.anchor;
       this.box(.24,ay+.45,.24,'#667d81',[ax,(ay+.45)/2,az]);
       this.box(.45,.28,.14,'#869b9c',n.anchor);
+      for(const dx of [-.16,.16])for(const dy of [-.085,.085])this.mesh(new THREE.SphereGeometry(.014,6,6),this.material('#d2d5c8'),[ax+dx,ay+dy,az+.078]);
       this.rod(n.anchor,n.pos,.036,'#bac4c2');
       this.line([[ax,.08,az],[ax,ay,az]],'#7dc5b6',this.root,.35);
       const o=new THREE.Vector3(...n.pos),t=new THREE.Vector3(...n.target),d=t.clone().sub(o),len=d.length();
@@ -185,17 +200,17 @@ export class FieldScene {
     group.clear();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());
   }
   rebuild(stage,site,nodes){
-    this.stage=stage;this.site=site;this.nodes=nodes;this.picks=[];this.clear(this.root);this.clear(this.fovs);this.clear(this.clearanceGroup);this.labels.innerHTML='';
+    this.stage=stage;this.site=site;this.nodes=nodes;this.picks=[];this.clear(this.root);this.actors=[];this.clear(this.fovs);this.clear(this.clearanceGroup);this.labels.innerHTML='';
     this.drawField();nodes.forEach(n=>this.device(n));
     const boundary=activityBoundary(stage),points=[...boundary,boundary[0]].map(([x,z])=>[x,.12,z]);
     this.line(points,'#85ffce',this.clearanceGroup);
     for(const n of nodes){
       const ring=this.mesh(new THREE.RingGeometry(.65,.72,32),new THREE.MeshBasicMaterial({color:'#85ffce',side:THREE.DoubleSide,transparent:true,opacity:.85}),[n.pos[0],.12,n.pos[2]],this.clearanceGroup);ring.rotation.x=-Math.PI/2;
     }
-    this.fovs.visible=this.showCoverage;this.select(this.selected);this.setView('angle');
+    this.fovs.visible=this.showCoverage;this.select(this.selected);this.setView('angle');this.applyActorFilters();
   }
   select(id){this.selected=id;for(const n of this.nodes){n.body.material.emissive.set(n.id===id?colors[n.type]:'#000000');n.body.material.emissiveIntensity=.32;n.pin.classList.toggle('selected',n.id===id)}}
-  setLight(night){this.night=night;const sky=night?'#152a41':'#abc3ce';this.scene.background=new THREE.Color(sky);this.scene.fog=new THREE.Fog(sky,170,470);this.ambient.intensity=night?.85:2.1;this.sun.intensity=night?1.8:3.2;this.sun.color.set(night?'#b5d9ff':'#fff0d6');this.renderer.toneMappingExposure=night?.95:1.1}
+  setLight(night){this.night=night;const sky=night?'#182b40':'#c9d7d7';this.scene.background=new THREE.Color(sky);this.scene.fog=new THREE.Fog(sky,180,470);this.sky.material.uniforms.top.value.set(night?'#08172d':'#779eb8');this.sky.material.uniforms.bottom.value.set(sky);this.ambient.intensity=night?.65:1.7;this.sun.intensity=night?1.8:3.0;this.fill.intensity=night?.35:.55;this.sun.color.set(night?'#b5d9ff':'#fff0d6');this.renderer.toneMappingExposure=night?.95:1.05}
   setView(kind){
     const field=['pilot','full'].includes(this.stage);let target=[0,.5,field?-42:-9],pos=[field?82:24,field?88:21,field?88:23];
     if(kind==='top')pos=[0,field?153:35,target[2]+.02];
@@ -215,11 +230,11 @@ export class FieldScene {
     }
     const pts=Array.from({length:121},(_,i)=>new THREE.Vector3(...positionAt(pitch,pitch.duration*i/120)));
     const curve=new THREE.CatmullRomCurve3(pts);
-    this.mesh(new THREE.TubeGeometry(curve,120,.015,6,false),new THREE.MeshBasicMaterial({color:pitch.profile.color,transparent:true,opacity:.6}),[0,0,0],this.fx);
+    const trail=this.mesh(new THREE.TubeGeometry(curve,120,.015,6,false),new THREE.MeshBasicMaterial({color:pitch.profile.color,transparent:true,opacity:.90,depthWrite:false}),[0,0,0],this.fx);trail.castShadow=false;trail.renderOrder=4;
     const marker=this.mesh(new THREE.RingGeometry(BALL_RADIUS*.9,BALL_RADIUS*1.15,32),new THREE.MeshBasicMaterial({color:pitch.decision.call==='STRIKE'?'#70f4bc':pitch.decision.call==='BALL'?'#ff927a':'#ffdb87',side:THREE.DoubleSide}),pitch.target,this.fx);
     marker.position.z+=.008;this.ball.position.set(...pitch.release);this.ball.visible=true;
   }
-  moveBall(u){if(!this.pitch)return;this.ball.position.set(...positionAt(this.pitch,this.pitch.duration*u));this.ball.rotation.set(u*9,u*13,u*3);if(this.pitcher)this.pitcher.rotation.x=-Math.sin(u*Math.PI)*.14}
+  moveBall(u){if(!this.pitch)return;this.ball.position.set(...positionAt(this.pitch,this.pitch.duration*u));this.ball.rotation.set(u*9,u*13,u*3)}
   frame(){
     requestAnimationFrame(this.frame);this.controls.update();const w=this.host.clientWidth,h=this.host.clientHeight,placed=[];
     // Give the selected label priority, suppress overlaps in wide stadium views.
@@ -229,6 +244,7 @@ export class FieldScene {
       const visible=this.showLabels&&p.z<1&&p.z>-1&&x>35&&x<w-35&&y>16&&y<h-65&&!overlap;
       n.pin.style.display=visible?'block':'none';if(visible){n.pin.style.left=`${x}px`;n.pin.style.top=`${y}px`;placed.push({x,y})}
     }
+    this.sky.position.copy(this.camera.position);
     if(this.onFrame)this.onFrame(performance.now());this.renderer.render(this.scene,this.camera);
   }
 }
