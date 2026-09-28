@@ -1,5 +1,6 @@
 // Canonical demo coordinates: metres; x = catcher's right, y = up,
 // z = toward catcher. Origin = rear tip of home plate. Not Statcast coordinates.
+import { toWorld, syntheticAxes } from './optics.js';
 export const PLATE = { width: 0.4318, depth: 0.4318, planeZ: -0.2159, rubberZ: -18.4404 };
 export const BALL_RADIUS = 0.0366;
 export const PITCHES = {
@@ -62,7 +63,12 @@ export function makeRecord(pitch, stage, index) {
   });
   return {
     schema_version: 'demo-pitch/2.0', id: `demo-${Date.now()}-${index}`, recorded_at: new Date().toISOString(),
-    source: 'synthetic', stage, coordinate_frame: 'home-rear-tip:x-catcher-right,y-up,z-catcher;m',
+    source: 'synthetic', stage, plan_version: '3.0', coordinate_frame: 'home-rear-tip:x-catcher-right,y-up,z-catcher;m',
+    plan_world_frame: 'home-rear-tip:x-catcher-right,y-pitcher,z-up;m',
+    coordinate_mapping: 'scene[x,y,z] -> world[x,-z,y]',
+    synthetic_spin: {source:'synthetic-preset',rpm:pitch.profile.rpm,axis_world:syntheticAxes[pitch.type],measurement:false},
+    measurement_requirements: {direct_spin_phase_one:true,sample_to_visible_deadline_ms:800},
+    measurements: {spin_rpm:null,spin_axis_world:null,method:null,validity:'not-connected',sample_to_visible_ms:null},
     pitch_type: { label: pitch.type, source: 'user-selected-demo', confidence: null, model_version: null },
     batter: { id: 'demo-batter', height_cm: pitch.heightCm, height_source: 'demo-input' },
     trajectory: { model: 'synthetic-constant-acceleration', release_m: pitch.release, initial_velocity_mps: pitch.velocity,
@@ -75,7 +81,9 @@ export function makeRecord(pitch, stage, index) {
       exit_velocity_kmh: null, launch_angle_deg: null, bat_speed_kmh: null, oaa: null },
     abs: { ...pitch.decision, zone: pitch.zone, ball_radius_m: BALL_RADIUS },
     acquisition: { camera_frames: [], radar_iq: [], calibration_id: null, clock_sync_error_us: null,
-      measurement_covariance: null, note: 'No hardware measurements; trajectory samples are generated, not sensor raw data.' },
+      measurement_covariance: null, clock_epoch_id:null, t_support_start_ns:null, t_support_end_ns:null,
+      note: 'No hardware measurements; trajectory samples and visual spin are synthetic, not raw data or direct measurements.' },
+    world_trajectory: {source:'synthetic', samples:samples.map(s=>({t_s:s.t_s,position_m:toWorld(s.position_m),velocity_mps:toWorld(s.velocity_mps)}))},
     game_events: null, fielding_tracks: [], latency_ms: null,
   };
 }

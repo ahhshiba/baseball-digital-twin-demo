@@ -5,6 +5,7 @@ import { PLATE, BALL_RADIUS, positionAt } from './pitch.js';
 import { activityBoundary } from './deployment.js';
 import { makeAthlete } from './actors.js';
 import { setActorOpacity } from './actor-visibility.js';
+import { syntheticAxes, toScene } from './optics.js';
 
 export class FieldScene {
   constructor(host, labels, onSelect) {
@@ -41,6 +42,16 @@ export class FieldScene {
     // The halo is a screen aid, not an enlarged measurement ball.
     this.halo=new THREE.Mesh(new THREE.SphereGeometry(.12,12,8),new THREE.MeshBasicMaterial({color:'#ffd785',transparent:true,opacity:.18,depthWrite:false}));
     this.ball.add(this.halo);
+    this.showSpinAxis=true;
+    this.spinAxis=new THREE.ArrowHelper(new THREE.Vector3(1,0,0),new THREE.Vector3(),.65,'#bf92ff',.14,.085);
+    this.scene.add(this.spinAxis);
+    // A virtual observation region, not an object installed on the playing surface.
+    this.measurementZone=new THREE.Group();this.scene.add(this.measurementZone);
+    const regionGeometry=new THREE.BoxGeometry(.85,.70,1.4);
+    const region=new THREE.Mesh(regionGeometry,new THREE.MeshBasicMaterial({color:'#bb9af1',transparent:true,opacity:.065,depthWrite:false}));
+    region.position.set(0,1.7,-16);this.measurementZone.add(region);
+    const regionEdges=new THREE.LineSegments(new THREE.EdgesGeometry(regionGeometry),new THREE.LineBasicMaterial({color:'#bf9ef5',transparent:true,opacity:.7}));
+    regionEdges.position.copy(region.position);this.measurementZone.add(regionEdges);
     this.night=false;this.showCoverage=false;this.showLabels=true;this.selected='cam-a';
     this.ray=new THREE.Raycaster();this.pointer=new THREE.Vector2();
     this.renderer.domElement.addEventListener('click',e=>{
@@ -160,14 +171,19 @@ export class FieldScene {
     const g=new THREE.Group();g.position.set(...n.pos);g.lookAt(new THREE.Vector3(...n.target));this.root.add(g);
     const c=colors[n.type],body=this.box(n.type==='edge'?.48:.28,n.type==='edge'?.64:.19,n.type==='edge'?.35:.42,c,[0,0,0],g);
     body.material.roughness=.38;body.material.metalness=.25;body.userData.id=n.id;this.picks.push(body);n.body=body;
-    if(n.type==='camera'){
+    if(n.type==='camera'||n.type==='spin'){
       this.box(.32,.035,.49,'#adb9b5',[0,.115,.035],g);
       const lens=this.mesh(new THREE.CylinderGeometry(.068,.068,.2,20),this.material('#1b252e'),[0,0,.28],g);lens.rotation.x=Math.PI/2;
       this.mesh(new THREE.TorusGeometry(.067,.008,8,20),this.material('#6d838b'),[0,0,.385],g);
       const glass=this.mesh(new THREE.CircleGeometry(.061,20),new THREE.MeshStandardMaterial({color:'#426b83',metalness:.8,roughness:.1}),[0,0,.385],g);glass.userData.id=n.id;this.picks.push(glass);
-    }else if(n.type==='edge'){
+    }else if(['edge','fpga','sync'].includes(n.type)){
       for(let y=-.2;y<.25;y+=.08)this.box(.35,.02,.025,'#263b3e',[0,y,.19],g);
       this.box(.04,.04,.02,'#b8ffb4',[.12,.25,.19],g);
+    }else if(n.type==='light'){
+      this.box(.42,.25,.06,'#36474b',[0,0,.23],g);
+      for(const x of [-.13,0,.13])for(const y of [-.07,.07]){
+        const led=this.mesh(new THREE.CircleGeometry(.035,10),new THREE.MeshStandardMaterial({color:'#fff6d4',emissive:'#ffe5a4',emissiveIntensity:1}),[x,y,.267],g);led.castShadow=false;
+      }
     }else{this.box(.21,.14,.035,'#edf0e9',[0,0,.23],g)}
     if(n.mountKind==='cabinet'){
       this.box(.65,.8,.55,'#607777',[n.pos[0],.45,n.pos[2]]);
@@ -182,9 +198,9 @@ export class FieldScene {
       this.rod(n.anchor,n.pos,.036,'#bac4c2');
       this.line([[ax,.08,az],[ax,ay,az]],'#7dc5b6',this.root,.35);
       const o=new THREE.Vector3(...n.pos),t=new THREE.Vector3(...n.target),d=t.clone().sub(o),len=d.length();
-      if(n.type==='camera'){
+      if(n.type==='camera'||n.type==='spin'){
         const right=new THREE.Vector3().crossVectors(d.clone().normalize(),new THREE.Vector3(0,1,0)).normalize(),up=new THREE.Vector3().crossVectors(right,d.clone().normalize()).normalize();
-        const w=Math.min(12,len*.24),h=w*.6,cs=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>t.clone().addScaledVector(right,w*a).addScaledVector(up,h*b));
+        const w=n.type==='spin'?(720*6.9e-6*len/(n.focalMm*.001))/2:Math.min(12,len*.24),h=w*.75,cs=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>t.clone().addScaledVector(right,w*a).addScaledVector(up,h*b));
         for(const p of cs)this.line([o.toArray(),p.toArray()],c,this.fovs,.35);this.line([...cs,cs[0]].map(v=>v.toArray()),c,this.fovs,.5);
       }else{
         const cone=this.mesh(new THREE.ConeGeometry(Math.min(6,len*.20),len,24,1,true),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.065,side:THREE.DoubleSide,depthWrite:false}),o.clone().addScaledVector(d,.5).toArray(),this.fovs);
@@ -217,6 +233,7 @@ export class FieldScene {
     if(kind==='side')pos=[field?85:28,field?32:8,target[2]+7];
     if(kind==='plate'){pos=[1.4,2.0,5.2];target=[0,.8,-1.7]}
     if(kind==='pitcher'){pos=[2,3,-21.5];target=[0,.8,-.2]}
+    if(kind==='spin'){pos=[3.6,3.7,-12.3];target=[0,1.65,-16]}
     this.controls.target.set(...target);this.camera.position.set(...pos);this.controls.update();
   }
   setPitch(pitch){
@@ -232,9 +249,15 @@ export class FieldScene {
     const curve=new THREE.CatmullRomCurve3(pts);
     const trail=this.mesh(new THREE.TubeGeometry(curve,120,.015,6,false),new THREE.MeshBasicMaterial({color:pitch.profile.color,transparent:true,opacity:.90,depthWrite:false}),[0,0,0],this.fx);trail.castShadow=false;trail.renderOrder=4;
     const marker=this.mesh(new THREE.RingGeometry(BALL_RADIUS*.9,BALL_RADIUS*1.15,32),new THREE.MeshBasicMaterial({color:pitch.decision.call==='STRIKE'?'#70f4bc':pitch.decision.call==='BALL'?'#ff927a':'#ffdb87',side:THREE.DoubleSide}),pitch.target,this.fx);
-    marker.position.z+=.008;this.ball.position.set(...pitch.release);this.ball.visible=true;
+    marker.position.z+=.008;this.ball.visible=true;this.moveBall(0);
   }
-  moveBall(u){if(!this.pitch)return;this.ball.position.set(...positionAt(this.pitch,this.pitch.duration*u));this.ball.rotation.set(u*9,u*13,u*3)}
+  moveBall(u){
+    if(!this.pitch)return;
+    this.ball.position.set(...positionAt(this.pitch,this.pitch.duration*u));
+    const axis=new THREE.Vector3(...toScene(syntheticAxes[this.pitch.type]));
+    this.ball.quaternion.setFromAxisAngle(axis,this.pitch.profile.rpm*2*Math.PI/60*this.pitch.duration*u);
+    this.spinAxis.setDirection(axis);this.spinAxis.position.copy(this.ball.position);this.spinAxis.visible=this.showSpinAxis;
+  }
   frame(){
     requestAnimationFrame(this.frame);this.controls.update();const w=this.host.clientWidth,h=this.host.clientHeight,placed=[];
     // Give the selected label priority, suppress overlaps in wide stadium views.

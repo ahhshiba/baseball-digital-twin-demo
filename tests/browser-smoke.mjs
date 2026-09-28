@@ -10,6 +10,43 @@ const url=process.env.DEMO_URL||'http://127.0.0.1:5174/baseball-digital-twin-dem
 await mkdir('artifacts',{recursive:true});
 try {
   await page.goto(url);await page.waitForSelector('#scene canvas');await page.waitForFunction(()=>document.querySelector('#hud-type')?.textContent.includes('FF'));
+  assert.equal(await page.locator('.app').getAttribute('data-plan-version'),'3.0');
+  assert.equal(await page.locator('[data-stage="poc"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('#node-list .node').count(),9);
+  assert.ok((await page.locator('#stage-brief').textContent()).includes('15.3–22.0萬'));
+  await page.screenshot({path:'artifacts/v3-poc.png'});
+  await page.locator('[data-panel="spin"]').click();
+  assert.ok((await page.locator('#spin-panel').textContent()).includes('第一期必要驗收'));
+  assert.ok((await page.locator('#optics-warnings').textContent()).includes('少於8'));
+  const pixels=await page.locator('#optics-results strong').first().textContent();
+  await page.locator('#optics-mode').selectOption('roi');
+  assert.equal(await page.locator('#optics-results strong').first().textContent(),pixels,'ROI must not magnify ball');
+  await page.locator('#optics-mode').selectOption('full');
+  await page.locator('#optics-focal').fill('25');
+  assert.ok((await page.locator('#optics-warnings').textContent()).includes('低於80px'));
+  await page.locator('#optics-focal').fill('50');
+  await page.locator('#spin-focus').click();
+  await page.screenshot({path:'artifacts/v3-spin.png'});
+  await page.locator('#axis-toggle').click();assert.equal(await page.locator('#axis-toggle').getAttribute('aria-pressed'),'false');
+  await page.locator('#axis-toggle').click();
+  await page.locator('#measurement-zone').click();assert.equal(await page.locator('#measurement-zone').getAttribute('aria-pressed'),'false');
+  await page.locator('#measurement-zone').click();
+  await page.locator('[data-panel="nodes"]').click();
+  await page.locator('#option-fpga').check();await page.locator('#option-radar60').check();
+  assert.equal(await page.locator('#node-list .node').count(),11);
+  assert.ok((await page.locator('#optional-note').textContent()).includes('未加進一期BOM'));
+  await page.locator('#option-fpga').uncheck();await page.locator('#option-radar60').uncheck();
+  await page.locator('[data-panel="plan"]').click();
+  assert.ok((await page.locator('.budget-hero').first().textContent()).includes('152,950'));
+  const bomDownload=page.waitForEvent('download');await page.locator('#export-bom').click();
+  assert.ok((await readFile(await (await bomDownload).path(),'utf8')).includes('219650'));
+  const planDownload=page.waitForEvent('download');await page.locator('#export-plan').click();
+  const plan=JSON.parse(await readFile(await (await planDownload).path(),'utf8'));
+  assert.equal(plan.plan.latencyMs,800);assert.equal(plan.plan.directSpinRequired,true);
+  assert.equal(plan.budget.totalLow,152950);
+  await page.locator('.panel-scroll').evaluate(el=>el.scrollTop=0);
+  await page.screenshot({path:'artifacts/v3-plan.png'});
+  await page.locator('[data-stage="full"]').click();
   await page.locator('#clearance').click();assert.equal(await page.locator('#clearance').getAttribute('aria-pressed'),'true');
   await page.locator('[data-panel="nodes"]').click();await page.locator('[data-node="cam-c"]').click();
   assert.ok((await page.locator('#detail').textContent()).includes('三壘側看台'));
@@ -53,6 +90,8 @@ try {
   const jsonDownload=page.waitForEvent('download');await page.locator('#export-json').click();
   const jsonFile=await jsonDownload,records=JSON.parse(await readFile(await jsonFile.path(),'utf8')).records;
   assert.equal(records[0].pitch_type.label,'SL');assert.equal(records[0].source,'synthetic');assert.equal(records[0].trajectory.samples.length,241);
+  assert.equal(records[0].measurements.spin_axis_world,null);assert.equal(records[0].measurements.spin_rpm,null);
+  assert.equal(records[0].synthetic_spin.measurement,false);assert.equal(records[0].measurement_requirements.sample_to_visible_deadline_ms,800);
   const csvDownload=page.waitForEvent('download');await page.locator('#export-csv').click();const csv=await csvDownload;
   assert.ok((await readFile(await csv.path(),'utf8')).includes('user-selected-demo'));
   await page.reload();await page.waitForSelector('#record-count');assert.ok((await page.locator('#record-count').textContent()).includes('1 球'));
@@ -61,12 +100,22 @@ try {
   await page.locator('[data-panel="nodes"]').click();await page.locator('[data-node="r24"]').click();
   assert.ok((await page.locator('#detail').textContent()).includes('I/Q'));
   await page.locator('[data-panel="flow"]').click();assert.equal(await page.locator('.flow-list>div').count(),5);
+  assert.equal(await page.locator('.latency-list>div').count(),8);
+  assert.ok((await page.locator('#flow-panel').textContent()).includes('最早納入'));
+  await page.screenshot({path:'artifacts/v3-flow.png'});
   await page.locator('[data-panel="dashboard"]').click();
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/mobile.png',fullPage:true});
   await page.locator('#ghost-actors').click();assert.equal(await page.locator('#scene').getAttribute('data-catcher-opacity'),'0.25');
   await page.locator('#actor-filter-options summary').click();await page.screenshot({path:'artifacts/mobile-filters.png'});
   const filterBox=await page.locator('.actor-filter-body').boundingBox();assert.ok(filterBox.x>=0&&filterBox.x+filterBox.width<=390,'mobile filter controls must not be clipped');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.locator('#actor-filter-options summary').click();
+  for(const panel of ['nodes','spin','plan','flow','metrics']){
+    await page.locator(`[data-panel="${panel}"]`).click();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`mobile overflow on ${panel}`);
+  }
+  await page.locator('[data-stage="poc"]').click();await page.locator('[data-panel="spin"]').click();
+  await page.screenshot({path:'artifacts/v3-mobile-spin.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true,url,scenarios:4,stages:4,downloads:['JSON','CSV'],browserErrors:errors,mobileOverflow:false}));
+  console.log(JSON.stringify({passed:true,url,planVersion:'3.0',scenarios:4,stages:4,panels:6,downloads:['pitch JSON','pitch CSV','BOM CSV','plan JSON'],browserErrors:errors,mobileOverflow:false}));
 } finally {await browser.close()}

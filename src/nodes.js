@@ -1,34 +1,39 @@
 import { applyMounts } from './deployment.js';
 export const stages = [
-  {id:'poc',name:'概念驗證',short:'P0',subtitle:'室內 · 幾何與同步驗證',description:'兩個相機視角驗證球心定位、時間同步與雷達速度。近攝模式只涵蓋局部，不代表可量進壘點。'},
-  {id:'bullpen',name:'牛棚',short:'P1',subtitle:'牛棚 · 投球追蹤與 ABS 研究',description:'釋球端與本壘交叉視角，研究完整球路與訓練輔助判讀。轉速仍需另外驗證球縫解析度。'},
-  {id:'pilot',name:'球場局部',short:'P2',subtitle:'球場 · 投打區域先導',description:'增加擊球後軌跡與打擊事件。此階段並未驗證全場守備或正式 ABS 判決。'},
-  {id:'full',name:'全場概念',short:'P3',subtitle:'球場 · 全場追蹤構想',description:'展示投打守的空間關係。遠端節點、焦段與數量仍需場勘及可觀測性測試；不代表已具完整覆蓋。'},
+  {id:'poc',name:'一期 PoC',short:'P0',subtitle:'一期 · 球路＋直接旋轉',budget:'15.3–22.0萬',timing:'W1–12',description:'2顆球路＋2顆球縫相機＋24GHz I/Q。直接轉速與三維有向軸為一期必驗，不能以球路反推值替代。'},
+  {id:'bullpen',name:'牛棚驗證',short:'P1',subtitle:'牛棚 · 固定化與訓練驗證',budget:'累計47萬',timing:'W13–20',description:'沿用一期感測器，增加運算、防護、備品與重裝校正；50萬上限仍需獨立參考儀與場地資源。'},
+  {id:'pilot',name:'局部擴充',short:'P2',subtitle:'球場局部 · 擊球研究',budget:'總硬體100萬內分配',timing:'一期通過後',description:'增加打擊視角，60GHz / FPGA以選配研究呈現。全場場外長距離的球縫可觀測性須重新驗證。'},
+  {id:'full',name:'全場構想',short:'P3',subtitle:'全場 · 覆蓋與守備研究',budget:'100萬為封頂構想',timing:'另案驗證',description:'展示OAA-like資料需求，不保證此節點數足以全場追球，也不代表100萬即可交付正式ABS。'},
 ];
-export const colors={camera:'#63a9ff',radar24:'#f0a967',radar60:'#ca87e9',edge:'#60d6aa',lidar:'#f3d676'};
-export const typeNames={camera:'光學相機',radar24:'24 GHz Doppler',radar60:'60 GHz FMCW',edge:'FPGA 邊緣節點',lidar:'光達（選配研究）'};
-const n=(id,name,type,pos,target,role,raw)=>({id,name,type,pos,target,role,raw});
-const near=[
- n('cam-a','相機 A｜近攝','camera',[-2,1.8,-15.5],[0,1.6,-16],'釋球附近影像；球縫辨識需短曝光和足夠像素。','影格、曝光時間、時間戳、球心／球縫像素'),
- n('cam-b','相機 B｜近攝','camera',[2,1.8,-15.5],[0,1.6,-16],'提供第二視角，配對同步影格進行三角定位。','影格、同步狀態、相機內外參、候選信心'),
- n('r24','24 GHz｜軸向','radar24',[0,2.5,4.5],[0,1.3,-17],'量測沿視線的徑向速度；單一 CW 雷達不提供絕對距離。','I/Q、取樣率、頻譜、Doppler 峰值、SNR'),
- n('r60','60 GHz｜近場','radar60',[3.5,2.1,-6],[0,1.3,-12],'測試高速小球的 range–Doppler；須確認最大不模糊速度與雜波。','chirp 設定、ADC/IQ、距離－速度圖、角度與協方差'),
- n('edge','FPGA｜邊緣箱','edge',[5.1,.7,-2],[0,1,-8],'時間戳、ROI、前處理與事件封包；融合及資料庫先由研發電腦承接。','事件 ID、硬體時間戳、丟幀率、溫度、版本'),
+export const colors={camera:'#63a9ff',spin:'#c29eff',radar24:'#f0a967',radar60:'#ca87e9',edge:'#60d6aa',fpga:'#75d4d7',sync:'#9ebcc8',light:'#f7d483'};
+export const typeNames={camera:'球路光學相機',spin:'球縫高速相機 · 一期必要',radar24:'24 GHz · 原始 I/Q',radar60:'60 GHz · 選配研究',edge:'PC 邊緣運算',fpga:'FPGA · 平行研發',sync:'同步 / 隔離觸發',light:'短脈衝照明'};
+const n=(id,name,type,target,model,role,raw,extra={})=>({id,name,type,pos:[0,0,0],target,model,role,raw,required:true,...extra});
+const spinTarget=[0,1.7,-16];
+const core=[
+  n('cam-a','T1｜球路左視角','camera',[0,1.2,-8],'Basler a2A1920-160umBAS','球心定位與全程球路候選；需要與T2時間/幾何配對。','L0 Mono8影格；曝光、frame_seq、時間戳、內外參',{source:'basler'}),
+  n('cam-b','T2｜球路交叉視角','camera',[0,1.2,-8],'Basler a2A1920-160umBAS','立體定位與進壘位置；不是球縫量測鏡頭。','像素/半徑、可見性、sync_sigma、校正ID',{source:'basler'}),
+  n('cam-c','S1｜球縫高速左','spin',spinTarget,'FLIR BFS-U3-04S2M-CS','第一期直接旋轉主觀測；球像、幀數、曝光未過門檻不得宣稱達標。','未壓縮球面ROI、球縫、曝光起/中/終、球面姿態候選',{source:'spin',focalMm:50}),
+  n('cam-d','S2｜球縫高速右','spin',spinTarget,'FLIR BFS-U3-04S2M-CS','第二球面視角，處理對稱/半倍/倍頻與三維軸歧義；普通未標記球驗收。','同時刻雙視角影格、原始索引、R(t)、有向ω與品質',{source:'spin',focalMm:50}),
+  n('r24','R24｜I/Q 雷達','radar24',[0,1.4,-12],'OmniPreSense OPS243-A','CW徑向速度輔助；rolling buffer有輸出/再武裝死時間，不直接保證spin。','I/Q ADC code、fs、載頻、樣本窗、trigger、丟失/飽和',{source:'rolling'}),
+  n('light-a','L1｜球縫補光','light',spinTarget,'市售脈衝LED＋合規驅動器','比較球縫對比、光量、安全與短曝光；不是場內落地燈。','曝光/光脈衝時序、亮度設定、溫度、配置版本'),
+  n('light-b','L2｜交叉補光','light',spinTarget,'市售脈衝LED＋合規驅動器','補足另一視角；近紅外不一定看得清紅球縫。','照明配置、脈寬、觸發延遲、維護狀態'),
+  n('sync','SYNC｜觸發盒','sync',[0,1,-8],'MCU開發板＋隔離 I/O','共同trigger與曝光實測；0.8秒期限不代表可以放寬微秒級同步。','clock_epoch、ticks、clock map、ExposureActive偏差'),
+  n('edge','EDGE｜PC 節點','edge',[0,1,-8],'PoC沿用/借用主機；牛棚升級','先CPU建立可回放算法；就地保存raw、送小型狀態封包。不是必購FPGA。','L0索引、L1觀測、L2位置/ω、品質、queue age、版本'),
 ];
-const plate=near.map(n=>n.id==='cam-a'?{...n,name:'相機 A｜本壘',pos:[-3,2.3,2],target:[0,.8,-.22],role:'本壘球心與接近軌跡；需避免捕手遮擋。'}:n.id==='cam-b'?{...n,name:'相機 B｜本壘',pos:[3,2.3,2],target:[0,.8,-.22],role:'交叉定位進壘點與量測不確定度。'}:n);
-const bullpen=[...plate,
- n('cam-c','相機 C｜釋球','camera',[-3.6,2.8,-13],[0,1.6,-16.7],'釋球位置、延伸及球路起點。','短曝光影格、釋球事件、像素位置與時間戳'),
- n('cam-d','相機 D｜上方','camera',[1.3,4.5,-2],[0,.8,-.22],'降低本壘的遮擋，補充獨立視角。','頂視球心、可見性、內外參、校正誤差'),
- n('edge-b','FPGA｜本壘箱','edge',[-5,.7,1],[0,1,-1],'本壘 ROI 前處理與同步。','同步偏移、佇列時間、版本、丟幀率'),
+const additions=[
+  n('cam-e','T3｜打擊一壘側','camera',[0,1,-2],'依場勘詢價','擊球後球心、接觸事件；需重新驗出球速度包絡。','接觸時間、球/球棒像素、初始速度與事件ID',{required:false}),
+  n('cam-f','T4｜打擊三壘側','camera',[0,1,-2],'依場勘詢價','擊球交叉視角；兩機不保證完整落點。','同步影像、配對、初速/仰角/方向及covariance',{required:false}),
 ];
-const pilot=[...bullpen,
- n('cam-e','相機 E｜一壘側','camera',[24,9,-17],[0,1,-3],'打擊事件與局部擊出球軌跡。','擊球前後影格、接觸時刻、球／球棒像素'),
- n('cam-f','相機 F｜三壘側','camera',[-24,9,-17],[0,1,-3],'交叉追蹤初速、仰角與方向。','多視角配對、時間戳、可見性與校正版本'),
- n('r60-b','60 GHz｜打擊區','radar60',[-4,2.2,2],[0,1,-2],'實測有增益後才融合；不能假設現成人員追蹤韌體適用棒球。','range–Doppler、SNR、速度模糊狀態'),
+const outfield=[
+  n('cam-g','F1｜左外野研究','camera',[0,2,-48],'解析度 / 鏡頭另選','全場球員與球路研究，數量僅示意，需覆蓋/遮擋驗證。','球員ID、位置時間序列、守備事件、失追',{required:false}),
+  n('cam-h','F2｜右外野研究','camera',[0,2,-48],'解析度 / 鏡頭另選','交叉守備視角；OAA-like需大量實際標註資料。','球員軌跡、接傳球事件、機會/成敗標記',{required:false}),
 ];
-const full=[...pilot,
- n('cam-g','相機 G｜左外野','camera',[-60,13,-83],[0,2,-48],'外野球員追蹤研究；高速小球解析度需另驗證。','全場球員 ID、二維位置、時間戳'),
- n('cam-h','相機 H｜右外野','camera',[60,13,-83],[0,2,-48],'交叉守備視角；節點數量只是展示。','球員轨跡、遮擋與重識別信心'),
- n('lidar','光達｜人員研究','lidar',[0,6,14],[0,1,-24],'研究人員定位與靜態場地建模；一般掃描光達不保證能追棒球。','點雲、逐點時間戳、反射強度與外參'),
+const optional=[
+  n('fpga','FPGA｜平行研發','fpga',[0,1,-8],'先用現有開發板，介面另驗','同步/ROI/FFT/DMA逐項移植；不能將工業USB相機直接視為AXI像素輸入。','valid/ready、時間戳、overflow、固定點誤差、版本',{required:false,option:'fpga'}),
+  n('r60','R60｜ADC 研究','radar60',[0,1.3,-8],'TI IWR6843ISK＋DCA1000EVM','raw需擷取板；高速小球、chirp速度模糊與場外距離均待驗。','LVDS ADC、chirp slope、TX/RX排程、range-Doppler、UDP loss',{required:false,option:'radar60',source:'ti'}),
 ];
-export const getNodes=(stage,nearView)=>applyMounts(structuredClone(stage==='poc'?(nearView?near:plate):stage==='bullpen'?bullpen:stage==='pilot'?pilot:full),stage,nearView);
+export function getNodes(stage,nearView=false,options={}){
+  if(!stages.some(s=>s.id===stage))throw new RangeError('Unknown stage');
+  const list=[...core,...(['pilot','full'].includes(stage)?additions:[]),...(stage==='full'?outfield:[]),...optional.filter(n=>options[n.option])];
+  return applyMounts(structuredClone(list),stage,nearView);
+}
