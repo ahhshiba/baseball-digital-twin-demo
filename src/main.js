@@ -2,10 +2,10 @@ import './style.css';
 import './workbench.css';
 import './actor-controls.css';
 import './planning.css';
-import { PLAN, bomCSV } from './plan.js';
-import { buyStages, getPurchaseNodes, parsePlanHash, variantPlan, purchaseCSV } from './procurement.js';
-import { buyPlanHTML, buySpinHTML, buyFlowHTML } from './procurement-ui.js';
-import { planHTML, spinHTML, flowHTML, sourceLink } from './planning-ui.js';
+import { PLAN } from './plan.js';
+import { buyStages, getPurchaseNodes, parsePlanHash } from './procurement.js';
+import { buySpinHTML, buyFlowHTML } from './procurement-ui.js';
+import { spinHTML, flowHTML, sourceLink } from './planning-ui.js';
 import { opticsEstimate, observationGeometry, syntheticAxes, toWorld } from './optics.js';
 import { stages, colors, typeNames, getNodes } from './nodes.js';
 import { PITCHES, PLATE, BALL_RADIUS, makePitch, makeRecord } from './pitch.js';
@@ -14,8 +14,9 @@ import { fullFieldHTML, setupFullFieldPanel } from './fullfield.js';
 import { FieldScene } from './scene.js';
 
 const $=s=>document.querySelector(s);
-const panels=['dashboard','nodes','fullfield','spin','plan','metrics','flow'];
-const requested=parsePlanHash(location.hash);
+const panels=['dashboard','nodes','fullfield','spin','metrics','flow'];
+const requestedRoute=parsePlanHash(location.hash);
+const requested={...requestedRoute,panel:requestedRoute.panel==='plan'?'nodes':requestedRoute.panel};
 let variant=requested.variant,stage=requested.stage,site='pen',nearView=false,selected='cam-c',activePanel=requested.panel;
 const options={fpga:false,radar60:false};
 let type='FF',scenario='strike',heightCm=180,playing=false,startTime=0,playPitch=null,playStage=null,playVariant=null;
@@ -25,8 +26,8 @@ const activeNodes=()=>variant==='buy'?getPurchaseNodes(stage):getNodes(stage,nea
 let pitch=makePitch(type,scenario,heightCm),nodes=activeNodes();
 
 $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-variant="${variant}">
-  <header class="topbar"><div class="identity"><div class="mark">◈</div><div><span class="overline">FIELD LAB / DIGITAL TWIN</span><h1>棒球數位孿生<span class="plan-badge">PLAN v${PLAN.version}</span></h1></div></div>
-    <div class="header-note"><span class="signal"></span>直接旋轉一期必驗 · 模擬資料</div><a class="source-link" href="https://github.com/ahhshiba/baseball-digital-twin-demo" target="_blank" rel="noopener">GitHub ↗</a></header>
+  <header class="topbar"><div class="identity"><div class="mark">◈</div><div><span class="overline">FIELD LAB / DIGITAL TWIN</span><h1>棒球數位孿生</h1></div></div>
+    <div class="header-note"><span class="signal"></span>設備位置與基本理論 · 模擬資料</div><a class="source-link" href="https://github.com/ahhshiba/baseball-digital-twin-demo" target="_blank" rel="noopener">GitHub ↗</a></header>
   <div class="stagebar"><div class="solution-switch" role="group" aria-label="方案版本"><button data-variant="build" aria-pressed="false"><b>A 自研量測</b><span>開放感測器＋自研演算法</span></button><button data-variant="buy" aria-pressed="false"><b>B 成品應用</b><span>購買整機＋授權資料整合</span></button><p id="variant-note"></p></div><div class="stagebar-label">部署情境<span>STAGES</span></div><div class="stage-buttons" id="stages"></div>
     <div class="site-toggle" id="site-toggle" hidden><button data-site="lab">室內</button><button data-site="pen">牛棚</button></div>
     <div class="site-toggle" id="scene-toggle" hidden><button data-scene="near">球縫觀測區</button><button data-scene="plate">本壘量測</button></div>
@@ -42,8 +43,8 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
     <div class="simulation" id="simulation" hidden><span>慢速回放</span><div class="progress"><div id="progress-fill"></div></div><b id="sim-event">釋球</b></div>
     <div class="toolbar"><button id="play" class="primary">▶ 投一球並記錄</button><button data-view="angle">全景</button><button data-view="plate">本壘近景</button><button data-view="pitcher">投手視角</button><button data-view="top">俯視</button><button data-view="side">側視</button></div>
   </section><aside class="panel"><div class="panel-tabs" role="tablist" aria-label="資料面板">
-    <button data-panel="dashboard" role="tab">投球 / ABS</button><button data-panel="nodes" role="tab">設備配置</button><button data-panel="fullfield" role="tab">全場追蹤</button><button data-panel="spin" role="tab">直接旋轉</button><button data-panel="plan" role="tab">計畫 / 預算</button><button data-panel="metrics" role="tab">數據能力</button><button data-panel="flow" role="tab">0.8秒流程</button>
-  </div><div class="panel-scroll"><div id="stage-brief" class="stage-brief"></div>
+    <button data-panel="dashboard" role="tab">投球 / ABS</button><button data-panel="nodes" role="tab">設備配置</button><button data-panel="fullfield" role="tab">全場追蹤</button><button data-panel="spin" role="tab">直接旋轉</button><button data-panel="metrics" role="tab">數據能力</button><button data-panel="flow" role="tab">0.8秒流程</button>
+  </div><div class="panel-scroll"><div id="stage-brief" hidden></div>
     <section id="dashboard-panel"><span class="eyebrow">PITCH WORKBENCH</span><h2>一球，從釋球到進壘</h2><p class="lead">切換球路與邊界情境，檢視模擬球路、量測欄位與判讀結果。</p>
       <div class="pitch-types">${Object.entries(PITCHES).map(([id,p])=>`<button data-pitch="${id}" style="--pitch-color:${p.color}"><b>${id}</b><span>${p.name}</span></button>`).join('')}</div>
       <div class="input-row"><label>投球情境<select id="scenario"><option value="strike">帶內球</option><option value="ball">帶外球</option><option value="edge">邊界球</option><option value="occluded">追蹤遮擋</option></select></label><label>示範打者身高<input id="height" type="number" value="180" min="140" max="220" step="1" aria-label="示範打者身高（公分）"><small>cm · 可接球員檔案</small></label></div>
@@ -58,9 +59,8 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
     <section id="fullfield-panel" hidden>${fullFieldHTML()}</section>
     <section id="metrics-panel" hidden><p id="metrics-variant" class="disclaimer"></p>${capabilityHTML()}</section>
     <section id="spin-panel" hidden><div data-version-content="build">${spinHTML()}</div><div data-version-content="buy" hidden>${buySpinHTML()}</div></section>
-    <section id="plan-panel" hidden><div data-version-content="build">${planHTML()}</div><div data-version-content="buy" hidden>${buyPlanHTML()}</div></section>
     <section id="flow-panel" hidden><div data-version-content="build">${flowHTML()}</div><div data-version-content="buy" hidden>${buyFlowHTML()}</div></section>
-  </div><div class="panel-foot">v${PLAN.version} · ${PLAN.priceChecked}價格查核 · 未連感測器 / 非正式ABS</div></aside></div></div>`;
+  </div><div class="panel-foot">設備位置概念展示 · 模擬資料 · 未連感測器 / 非正式ABS</div></aside></div></div>`;
 
 const field=new FieldScene($('#scene'),$('#labels'),id=>{selected=id;field.select(id);updateDetail();setPanel('nodes')});
 setupFullFieldPanel();
@@ -78,19 +78,13 @@ document.querySelectorAll('button[data-variant]').forEach(b=>b.onclick=()=>{
   stopPlayback();variant=b.dataset.variant;renderStage();setPanel(activePanel);
 });
 window.addEventListener('hashchange',()=>{
-  const route=parsePlanHash(location.hash);stopPlayback();variant=route.variant;stage=route.stage;activePanel=route.panel;renderStage();setPanel(activePanel);
+  const route=parsePlanHash(location.hash);stopPlayback();variant=route.variant;stage=route.stage;activePanel=route.panel==='plan'?'nodes':route.panel;renderStage();setPanel(activePanel);
 });
 for(const key of ['fpga','radar60'])$(`#option-${key}`).onchange=e=>{stopPlayback();options[key]=e.target.checked;renderStage()};
 for(const id of ['camera','mode','focal','exposure','speed','rpm'])$(`#optics-${id}`).addEventListener('input',renderOptics);
 $('#axis-toggle').onclick=()=>{field.showSpinAxis=!field.showSpinAxis;field.spinAxis.visible=field.showSpinAxis;$('#axis-toggle').setAttribute('aria-pressed',field.showSpinAxis)};
 $('#measurement-zone').onclick=()=>{field.measurementZone.visible=!field.measurementZone.visible;$('#measurement-zone').setAttribute('aria-pressed',field.measurementZone.visible)};
 $('#spin-focus').onclick=()=>{field.setView('spin');setPanel('spin')};
-$('#export-bom').onclick=()=>download(bomCSV(),'fieldlab-v3-public-bom.csv','text/csv;charset=utf-8');
-$('#export-plan').onclick=()=>download(JSON.stringify(variantPlan('build'),null,2),'fieldlab-v31-build-plan.json','application/json');
-$('#export-buy-csv').onclick=()=>download(purchaseCSV(),'fieldlab-v31-buy-comparison.csv','text/csv;charset=utf-8');
-$('#export-buy-plan').onclick=()=>download(JSON.stringify(variantPlan('buy'),null,2),'fieldlab-v31-buy-plan.json','application/json');
-
-
 function renderStage(){
   const buying=variant==='buy',activeStages=buying?buyStages:stages,info=activeStages.find(s=>s.id===stage);
   $('.app').dataset.variant=variant;
