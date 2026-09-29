@@ -1,5 +1,7 @@
 # 共同資料契約與Demo狀態
 
+> **v3.x 歷史文件，保留追溯。** 目前公開頁已改為 v4.2 展示層（場景／設備／原理／回放）；最新規劃以規劃報告 PDF v4.2 與 [全場 v4.2 摘要](full-field-v42.md) 為準，衝突時以新版為準。
+
 目前只有模擬/回放，無硬體擷取後端。`demo-pitch/2.0`記錄保留相容，v3增加`plan_version`、`synthetic_spin`、`measurements`、`measurement_requirements`與`world_trajectory`。
 
 v3.1新增`solution_variant='build'|'buy'`供展示方案追溯。兩版`source`仍為`synthetic`，不是vendor真實資料。成品adapter未實作；未來的vendor payload須與sensor raw分開保存，method/座標定義不明時不產生direct_spin_axis，API接收時間不當成曝光時間。
