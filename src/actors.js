@@ -21,9 +21,26 @@ export function makeAthlete(role, number) {
     for(let i=-2;i<=2;i++)stitch([[i*.022,.04,-.04],[i*.024,.095,-.032]],'#c5a179',g,.0025);
     return g;
   };
-  const catcher=role==='catcher',pitcher=role==='pitcher',batter=role==='batter';
-  const pelvis=catcher?[0,.53,.05]:pitcher?[0,.87,.47]:[0,.96,0];
-  const chest=catcher?[0,.91,-.15]:pitcher?[.06,1.25,.93]:[0,1.46,-.025];
+  const catcher=role==='catcher',pitcher=role==='pitcher',batter=role==='batter',fielder=role==='fielder';
+  // Role-specific reference poses. Coordinates are metres in the local athlete frame.
+  // Keeping pelvis/chest/feet in one coherent chain avoids detached-looking limbs.
+  const poses={
+    catcher:{pelvis:[0,.58,.08],chest:[0,.97,-.13],head:[0,1.21,-.18],
+      knees:[[-.34,.38,-.20],[.34,.38,-.20]],ankles:[[-.38,.09,.02],[.38,.09,.02]],
+      elbows:[[-.29,.81,-.30],[.28,.80,-.18]],hands:[[-.10,.76,-.52],[.12,.72,-.10]]},
+    pitcher:{pelvis:[0,.86,.36],chest:[.04,1.27,.72],head:[.08,1.55,.80],
+      knees:[[-.24,.50,.88],[.18,.50,.02]],ankles:[[-.30,.09,1.15],[.21,.09,-.18]],
+      elbows:[[-.30,1.10,.99],[.37,1.43,1.10]],hands:[[-.12,1.06,1.20],[.34,1.40,1.43]]},
+    batter:{pelvis:[0,.93,0],chest:[0,1.39,-.02],head:[0,1.70,-.02],
+      knees:[[-.23,.50,.08],[.23,.50,-.08]],ankles:[[-.29,.09,.16],[.29,.09,-.16]],
+      elbows:[[-.32,1.22,-.06],[.31,1.22,.04]],hands:[[-.11,1.36,-.28],[.15,1.42,-.18]]},
+    fielder:{pelvis:[0,.91,0],chest:[0,1.34,-.03],head:[0,1.65,-.03],
+      knees:[[-.24,.53,.12],[.22,.50,-.10]],ankles:[[-.32,.09,.18],[.29,.09,-.15]],
+      elbows:[[-.32,1.15,-.10],[.30,1.13,-.02]],hands:[[-.42,1.00,-.20],[.40,1.01,-.05]]},
+  };
+  const pose=poses[role]||poses.fielder;
+  const pelvis=pose.pelvis;
+  const chest=pose.chest;
   const torso=new THREE.Group();torso.position.set(...pelvis);root.add(torso);
   const trunk=new THREE.Vector3(...chest).sub(new THREE.Vector3(...pelvis));torso.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),trunk.clone().normalize());
   const length=trunk.length();
@@ -40,7 +57,7 @@ export function makeAthlete(role, number) {
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
     const badge=new THREE.Mesh(new THREE.PlaneGeometry(.18,.20),new THREE.MeshStandardMaterial({map:texture,roughness:1,transparent:true,alphaTest:.01,depthWrite:false}));badge.position.set(0,length*.65,.152);torso.add(badge);
   }
-  const headPos=catcher?[0,1.12,-.23]:pitcher?[.065,1.49,1.04]:[0,1.68,-.025];
+  const headPos=pose.head;
   segment([chest[0],chest[1],chest[2]],headPos,.054,.052,skin);
   const head=new THREE.Group();head.position.set(...headPos);if(pitcher)head.rotation.y=Math.PI;root.add(head);
   ellipsoid([0,0,0],[.095,.127,.091],skin,head);
@@ -55,8 +72,8 @@ export function makeAthlete(role, number) {
   ellipsoid([0,.06,-.10],[.105,.012,.085],navy,head);
   if(batter)ellipsoid([.102,.005,0],[.018,.095,.083],navy,head);
   const hips=[[-.10+pelvis[0],pelvis[1],pelvis[2]],[.10+pelvis[0],pelvis[1],pelvis[2]]];
-  const knees=catcher?[[-.30,.39,-.28],[.30,.39,-.28]]:pitcher?[[-.23,.48,1.08],[.20,.45,.05]]:[[-.15,.48,.045],[.17,.48,-.055]];
-  const ankles=catcher?[[-.28,.09,.04],[.28,.09,.04]]:pitcher?[[-.28,-.08,1.50],[.20,.07,-.32]]:[[-.18,.09,.02],[.20,.09,-.05]];
+  const knees=pose.knees;
+  const ankles=pose.ankles;
   for(let i=0;i<2;i++){
     segment(hips[i],knees[i],.099,.077,kit);ellipsoid(knees[i],[.078,.085,.078],kit);segment(knees[i],ankles[i],.075,.048,kit);
     const shoe=ellipsoid([ankles[i][0],ankles[i][1]-.03,ankles[i][2]-.045],[.066,.052,.145],navy);
@@ -64,13 +81,13 @@ export function makeAthlete(role, number) {
     stitch([[ankles[i][0]-.04,ankles[i][1]-.037,shoe.position.z-.08],[ankles[i][0]+.04,ankles[i][1]-.037,shoe.position.z-.08]],'#eee8d5',root,.006);
   }
   const shoulders=[[-.19+chest[0],chest[1]-.01,chest[2]],[.19+chest[0],chest[1]-.01,chest[2]]];
-  const elbows=catcher?[[-.30,.80,-.34],[.25,.76,-.11]]:pitcher?[[-.31,1.04,1.17],[.46,1.60,1.35]]:[[-.31,1.20,-.15],[.25,1.20,-.21]];
-  const hands=catcher?[[-.07,.76,-.67],[.13,.62,.13]]:pitcher?[[-.15,.99,1.32],[.46,1.57,1.8404]]:[[-.02,1.31,-.39],[.075,1.32,-.38]];
+  const elbows=pose.elbows;
+  const hands=pose.hands;
   for(let i=0;i<2;i++){
     ellipsoid(shoulders[i],[.095,.089,.085],kit);segment(shoulders[i],elbows[i],.076,.058,kit);
     ellipsoid(elbows[i],[.055,.055,.055],skin);segment(elbows[i],hands[i],.052,.032,skin);ellipsoid(hands[i],[.038,.055,.025],skin);
   }
-  glove(hands[0],catcher);
+  glove(hands[0],catcher||fielder);
   if(catcher){
     const armor=ellipsoid([0,.81,-.237],[.185,.255,.055],navy);armor.rotation.x=-.16;
     for(let y=.65;y<1.0;y+=.055)stitch([[-.13,y,-.27],[0,y-.014,-.302],[.13,y,-.27]],'#355e6c',root,.013);
@@ -81,7 +98,9 @@ export function makeAthlete(role, number) {
     for(let y=-.085;y<=.095;y+=.045)stitch([[-.108,y,-.07],[-.09,y,-.14],[0,y-.005,-.16],[.09,y,-.14],[.108,y,-.07]],'#859a9b',head,.006);
     for(const x of [-.07,0,.07])stitch([[x,-.09,-.135],[x,.025,-.164],[x,.105,-.123]],'#9eb0ad',head,.005);
   }
-  if(batter){segment([.035,1.31,-.39],[.34,2.04,-.33],.013,.031,'#b68450');segment([.035,1.31,-.39],[.12,1.52,-.37],.016,.017,'#243b3c')}
+  // The bat follows the batter's hands and rests over the back shoulder instead
+  // of floating vertically through the torso.
+  if(batter){segment(hands[1],[.58,1.93,.06],.013,.031,'#b68450');segment(hands[0],hands[1],.016,.017,'#243b3c')}
   // The reference pose is static: batch body parts by material to keep the full
   // field inexpensive to render. Filtering still includes every piece of gear.
   root.updateMatrixWorld(true);const batches=new Map(),originals=new Set();let partCount=0;
