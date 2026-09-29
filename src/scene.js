@@ -171,7 +171,11 @@ export class FieldScene {
     const g=new THREE.Group();g.position.set(...n.pos);g.lookAt(new THREE.Vector3(...n.target));this.root.add(g);
     const c=colors[n.type],body=this.box(n.type==='edge'?.48:.28,n.type==='edge'?.64:.19,n.type==='edge'?.35:.42,c,[0,0,0],g);
     body.material.roughness=.38;body.material.metalness=.25;body.userData.id=n.id;this.picks.push(body);n.body=body;
-    if(n.type==='camera'||n.type==='spin'){
+    if(n.type==='vendor'){
+      this.box(.34,.34,.10,'#d4dfda',[0,0,.18],g);
+      this.box(.24,.19,.015,'#1f4949',[0,.035,.239],g);
+      const optic=this.mesh(new THREE.CircleGeometry(.026,16),this.material('#152a32'),[.10,-.105,.245],g);optic.userData.id=n.id;this.picks.push(optic);
+    }else if(n.type==='camera'||n.type==='spin'){
       this.box(.32,.035,.49,'#adb9b5',[0,.115,.035],g);
       const lens=this.mesh(new THREE.CylinderGeometry(.068,.068,.2,20),this.material('#1b252e'),[0,0,.28],g);lens.rotation.x=Math.PI/2;
       this.mesh(new THREE.TorusGeometry(.067,.008,8,20),this.material('#6d838b'),[0,0,.385],g);

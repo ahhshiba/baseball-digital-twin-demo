@@ -10,7 +10,7 @@ const url=process.env.DEMO_URL||'http://127.0.0.1:5174/baseball-digital-twin-dem
 await mkdir('artifacts',{recursive:true});
 try {
   await page.goto(url);await page.waitForSelector('#scene canvas');await page.waitForFunction(()=>document.querySelector('#hud-type')?.textContent.includes('FF'));
-  assert.equal(await page.locator('.app').getAttribute('data-plan-version'),'3.0');
+  assert.equal(await page.locator('.app').getAttribute('data-plan-version'),'3.1');
   assert.equal(await page.locator('[data-stage="poc"]').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#node-list .node').count(),9);
   assert.ok((await page.locator('#stage-brief').textContent()).includes('15.3–22.0萬'));
@@ -99,7 +99,7 @@ try {
   await page.locator('.capability summary').first().click();
   await page.locator('[data-panel="nodes"]').click();await page.locator('[data-node="r24"]').click();
   assert.ok((await page.locator('#detail').textContent()).includes('I/Q'));
-  await page.locator('[data-panel="flow"]').click();assert.equal(await page.locator('.flow-list>div').count(),5);
+  await page.locator('[data-panel="flow"]').click();assert.equal(await page.locator('#flow-panel [data-version-content="build"] .flow-list>div').count(),5);
   assert.equal(await page.locator('.latency-list>div').count(),8);
   assert.ok((await page.locator('#flow-panel').textContent()).includes('最早納入'));
   await page.screenshot({path:'artifacts/v3-flow.png'});
@@ -116,6 +116,58 @@ try {
   }
   await page.locator('[data-stage="poc"]').click();await page.locator('[data-panel="spin"]').click();
   await page.screenshot({path:'artifacts/v3-mobile-spin.png',fullPage:true});
+  await page.setViewportSize({width:1512,height:1000});
+  await page.locator('button[data-variant="buy"]').click();
+  assert.equal(await page.locator('.app').getAttribute('data-variant'),'buy');
+  assert.equal(await page.locator('#node-list .node').count(),2);
+  assert.equal(await page.locator('#measurement-zone').isDisabled(),true);
+  assert.equal(await page.locator('#option-fpga').isVisible(),false);
+  assert.ok((await page.locator('#stage-brief').textContent()).includes('待報價'));
+  await page.locator('[data-panel="plan"]').click();
+  assert.equal(await page.locator('.purchase-card').count(),5);
+  assert.ok((await page.locator('[data-product="b1"] .purchase-total').textContent()).includes('待報價'));
+  assert.ok((await page.locator('[data-product="pro2-pitch"] .purchase-total').textContent()).includes('199,200'));
+  assert.ok((await page.locator('[data-product="x3b"] .purchase-total').textContent()).includes('604,864'));
+  await page.screenshot({path:'artifacts/v31-buy-plan.png'});
+  const buyCSV=page.waitForEvent('download');await page.locator('#export-buy-csv').click();
+  assert.ok((await readFile(await (await buyCSV).path(),'utf8')).includes('待報價'));
+  const buyJSON=page.waitForEvent('download');await page.locator('#export-buy-plan').click();
+  const buy=JSON.parse(await readFile(await (await buyJSON).path(),'utf8'));
+  assert.equal(buy.solution_variant,'buy');assert.equal(buy.allRequirementsVerified,false);
+  assert.equal(buy.products[0].estimate.firstYearLow,null);
+  await page.locator('[data-panel="flow"]').click();
+  assert.ok((await page.locator('#flow-panel [data-version-content="buy"]').textContent()).includes('iPad結果可用後約3秒'));
+  assert.equal(await page.locator('#flow-panel .latency-list').isVisible(),false);
+  for(const stage of ['poc','bullpen','pilot','full']){
+    await page.locator(`[data-stage="${stage}"]`).click();
+    assert.equal(await page.locator('#node-list .node').count(),2);
+    assert.ok((await page.locator('#stage-brief').textContent()).includes('B成品'));
+  }
+  await page.locator('[data-stage="poc"]').click();
+  await page.locator('[data-panel="dashboard"]').click();await page.locator('#play').click();
+  await page.waitForFunction(()=>!document.querySelector('#play').disabled);
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('fieldlab-demo-v2')));
+  assert.equal(stored.at(-1).solution_variant,'buy');assert.equal(stored.at(-1).source,'synthetic');
+  await page.reload();await page.waitForSelector('#node-list .node',{state:'attached'});
+  assert.equal(await page.locator('.app').getAttribute('data-variant'),'buy');
+  await page.locator('[data-panel="nodes"]').click();
+  await page.screenshot({path:'artifacts/v31-buy-nodes.png'});
+  await page.setViewportSize({width:390,height:844});
+  for(const panel of ['nodes','spin','plan','flow','metrics','dashboard']){
+    await page.locator(`[data-panel="${panel}"]`).click();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`buy mobile overflow on ${panel}`);
+  }
+  await page.locator('[data-panel="plan"]').click();
+  await page.screenshot({path:'artifacts/v31-buy-mobile.png',fullPage:true});
+  await page.locator('button[data-variant="build"]').click();
+  assert.equal(await page.locator('#node-list .node').count(),9);
+  assert.equal(await page.locator('#measurement-zone').isDisabled(),false);
+  await page.goto(url.split('#')[0]+'#buy/poc/flow');
+  await page.waitForFunction(()=>document.querySelector('.app')?.dataset.variant==='buy');
+  assert.equal(await page.locator('#tab-flow').getAttribute('aria-selected'),'true');
+  await page.goto(url.split('#')[0]+'#poc/plan');
+  await page.waitForFunction(()=>document.querySelector('.app')?.dataset.variant==='build');
+  assert.equal(await page.locator('#tab-plan').getAttribute('aria-selected'),'true');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true,url,planVersion:'3.0',scenarios:4,stages:4,panels:6,downloads:['pitch JSON','pitch CSV','BOM CSV','plan JSON'],browserErrors:errors,mobileOverflow:false}));
+  console.log(JSON.stringify({passed:true,url,planVersion:'3.1',scenarios:4,stages:4,panels:6,variants:2,downloads:['pitch JSON','pitch CSV','BOM CSV','plan JSON','buy comparison CSV','buy plan JSON'],browserErrors:errors,mobileOverflow:false}));
 } finally {await browser.close()}

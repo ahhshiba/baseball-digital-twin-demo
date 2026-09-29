@@ -1,6 +1,7 @@
 // Canonical demo coordinates: metres; x = catcher's right, y = up,
 // z = toward catcher. Origin = rear tip of home plate. Not Statcast coordinates.
 import { toWorld, syntheticAxes } from './optics.js';
+import { PLAN } from './plan.js';
 export const PLATE = { width: 0.4318, depth: 0.4318, planeZ: -0.2159, rubberZ: -18.4404 };
 export const BALL_RADIUS = 0.0366;
 export const PITCHES = {
@@ -55,7 +56,7 @@ export function makePitch(type = 'FF', scenario = 'strike', heightCm = 180) {
   return pitch;
 }
 
-export function makeRecord(pitch, stage, index) {
+export function makeRecord(pitch, stage, index, variant='build') {
   const endV = velocityAt(pitch, pitch.duration);
   const samples = Array.from({ length: 241 }, (_, i) => {
     const t = pitch.duration * i / 240;
@@ -63,7 +64,7 @@ export function makeRecord(pitch, stage, index) {
   });
   return {
     schema_version: 'demo-pitch/2.0', id: `demo-${Date.now()}-${index}`, recorded_at: new Date().toISOString(),
-    source: 'synthetic', stage, plan_version: '3.0', coordinate_frame: 'home-rear-tip:x-catcher-right,y-up,z-catcher;m',
+    source: 'synthetic', stage, plan_version: PLAN.version, solution_variant: variant, coordinate_frame: 'home-rear-tip:x-catcher-right,y-up,z-catcher;m',
     plan_world_frame: 'home-rear-tip:x-catcher-right,y-pitcher,z-up;m',
     coordinate_mapping: 'scene[x,y,z] -> world[x,-z,y]',
     synthetic_spin: {source:'synthetic-preset',rpm:pitch.profile.rpm,axis_world:syntheticAxes[pitch.type],measurement:false},

@@ -1,11 +1,13 @@
 import { PLAN, sources, bom, budgetTotals, bullpenBudget, expansionBudget, latency, acceptance, gates, fmtMoney } from './plan.js';
+import { auditHTML } from './procurement-ui.js';
 export const sourceLink=id=>`<a href="${sources[id].url}" target="_blank" rel="noopener">${sources[id].title} ↗</a>`;
 const moneyRows=rows=>rows.map(([label,value])=>`<tr><td>${label}</td><td>${fmtMoney(value)}</td></tr>`).join('');
 export function planHTML(){const b=budgetTotals();return `
-  <span class="eyebrow">OPEN SENSOR PLAN / V${PLAN.version}</span><h2>一期就量旋轉</h2>
+  <span class="eyebrow">A / BUILD ON OPEN SENSORS / V${PLAN.version}</span><h2>自研：一期就量旋轉</h2>
   <p class="lead">${PLAN.date} 計畫摘要 · 只公開工程估算與研究配置。精度、交期與價格皆待場測／書面確認。</p>
+  ${auditHTML()}
   <div class="plan-callout"><b>2 球路＋2 球縫＋24GHz</b><span>直接rpm與三維有向軸，不延後、不以球路反推替代。</span></div>
-  <div class="budget-hero"><small>完整 PoC 驗證組 · 含15%風險預留</small><strong>15.3–22.0 <em>萬 NTD</em></strong><span>${fmtMoney(b.totalLow)}–${fmtMoney(b.totalHigh)} · 參考儀另借/另計</span></div>
+  <div class="budget-hero"><small>候選 PoC 硬體預留 · 含15%風險預留</small><strong>15.3–22.0 <em>萬 NTD</em></strong><span>${fmtMoney(b.totalLow)}–${fmtMoney(b.totalHigh)} · 參考儀另借/另計</span></div>
   <details class="plan-detail" open><summary>一期硬體 BOM · 配件已列入</summary><div class="table-wrap"><table class="plan-table"><thead><tr><th>品項</th><th>預留小計 NTD</th></tr></thead><tbody>${bom.map(r=>`<tr><td>${r.item}<small>${r.model}</small></td><td>${(r.qty*r.low).toLocaleString()}–${(r.qty*r.high).toLocaleString()}</td></tr>`).join('')}<tr><td>小計</td><td>${b.low.toLocaleString()}–${b.high.toLocaleString()}</td></tr><tr><td>風險15%</td><td>${b.reserveLow.toLocaleString()}–${b.reserveHigh.toLocaleString()}</td></tr></tbody></table></div></details>
   <div class="disclaimer">這是可行性驗證組，不是直接旋轉已達標的產品報價。新edge主機、高規光學升級、獨立飛行參考儀及永久土木不含在PoC中。</div>
   <details class="plan-detail"><summary>10萬案：增購目標 NT$87,600</summary><p>增購小計73,000＋20%預留14,600。必須借足球路雙機/鏡頭、短脈衝照明、主機介面、治具與獨立參考儀；不是整套系統只值8.76萬。</p><p>借用不足或球縫看不清，就重審預算/工期，不能取消一期直接旋轉驗收。</p></details>
@@ -13,7 +15,7 @@ export function planHTML(){const b=budgetTotals();return `
   <details class="plan-detail"><summary>擴充：總硬體100萬封頂構想</summary><table class="plan-table"><tbody>${moneyRows(expansionBudget)}</tbody></table><p>不等於已買到全場OAA或正式ABS。FPGA新板、介面、工具與認證另評估，不能當免費升級。</p></details>
   <h3>驗收與採購關卡</h3><div class="gate-list">${gates.map(([id,time,title,text])=>`<article><span>${id} / ${time}</span><b>${title}</b><p>${text}</p></article>`).join('')}</div>
   <details class="plan-detail"><summary>一期建議驗收門檻 · 尚未實測</summary><table class="plan-table"><tbody>${acceptance.map(([a,b])=>`<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table><p>自由飛行、普通未標記球＋獨立真值；試驗數量與誤差門檻須球團簽核。正式ABS另案。</p></details>
-  <details class="plan-detail"><summary>公開售價與原廠來源（2026-09-28）</summary><div class="reference-links">${['baslerPrice','spinPrice','radar','spin','rolling','ti','dca','paper'].map(sourceLink).join('')}</div><p>USD×32為編預算假設。裸機公開售價不是到岸價，BOM已含工程價差預留，兩者不可重複加總。</p></details>
+  <details class="plan-detail"><summary>價格證據與原廠來源（${PLAN.priceChecked}查核）</summary><div class="reference-links">${['baslerPrice','spinPrice','radarPrice','spin','rolling','ti','dca','paper'].map(sourceLink).join('')}</div><p>USD×32為編預算假設。FLIR價格只確認到公開PDF索引，現價需詢價。裸機公開售價不是到岸價，BOM已含工程價差預留，兩者不可重複加總。</p></details>
   <div class="export-row"><button id="export-bom">下載 BOM CSV</button><button id="export-plan">下載公開計畫 JSON</button></div>
   <p class="mini-note">不含人力NRE、內部報價或球員資料。完整本機PDF／Word未上傳公開repo。</p>`;}
 

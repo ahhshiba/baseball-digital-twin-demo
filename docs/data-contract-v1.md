@@ -2,6 +2,8 @@
 
 目前只有模擬/回放，無硬體擷取後端。`demo-pitch/2.0`記錄保留相容，v3增加`plan_version`、`synthetic_spin`、`measurements`、`measurement_requirements`與`world_trajectory`。
 
+v3.1新增`solution_variant='build'|'buy'`供展示方案追溯。兩版`source`仍為`synthetic`，不是vendor真實資料。成品adapter未實作；未來的vendor payload須與sensor raw分開保存，method/座標定義不明時不產生direct_spin_axis，API接收時間不當成曝光時間。
+
 ## 座標與來源
 
 原點：本壘後尖端。plan world為x右、y朝投手、z上；Three.js場景為x右、y上、z朝捕手。world→scene為`[x,z,-y]`，scene→world為`[x,-z,y]`。位置、速度與有向轉軸皆套用同一正交轉換，單位SI。

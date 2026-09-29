@@ -1,16 +1,30 @@
 // Public planning estimates from 2026-09-28 v3.0, not measured performance.
-export const PLAN = Object.freeze({version:'3.0', date:'2026-09-28', updated:'2026-09-29', latencyMs:800,
+export const PLAN = Object.freeze({version:'3.1', date:'2026-09-28', updated:'2026-09-29', priceChecked:'2026-09-29', latencyMs:800,
   directSpinRequired:true, source:'public-planning-summary', fxUsdTwd:32});
 export const sources = {
   basler:{title:'Basler 原廠規格',url:'https://docs.baslerweb.com/a2a1920-160umbas'},
   baslerPrice:{title:'Soda Vision · USD 395',url:'https://www.sodavision.com/product/basler-a2a1920-160umbas/'},
   spin:{title:'FLIR 幀率 / 曝光表',url:'https://softwareservices.flir.com/BFS-U3-04S2/latest/Model/spec.html'},
-  spinPrice:{title:'Edmund Optics · USD 361',url:'https://www.edmundoptics.com/p/bfs-u3-04s2m-cs-usb3-blackflyreg-s-monochrome-camera/40161/?PrintPDF=true'},
+  spinPrice:{title:'Edmund PDF索引 · USD 361（現價待確認）',url:'https://www.edmundoptics.com/p/BFS-U3-04S2M-CS-USB3-Blackflyreg-S-Monochrome-Camera/40161?PrintPDF=true'},
   radar:{title:'OPS243-A · USD 224',url:'https://omnipresense.com/product/ops243-doppler-radar-sensor/'},
   rolling:{title:'Rolling Buffer · Rev C (2026)',url:'https://omnipresense.com/wp-content/uploads/2026/09/AN-027-C_Rolling-Buffer.pdf'},
   ti:{title:'TI IWR6843ISK',url:'https://www.ti.com/tool/IWR6843ISK'},
   dca:{title:'TI DCA1000 raw ADC 擷取',url:'https://www.ti.com/tool/DCA1000EVM'},
   paper:{title:'無標記棒球旋轉研究 · 2017',url:'https://doi.org/10.1007/s11760-017-1075-x'},
+  radarPrice:{title:'OmniPreSense 官方目錄 · USD 224',url:'https://omnipresense.com/product-category/sensor/'},
+  pro2:{title:'Rapsodo PRO 2.0 · USD 3,500起',url:'https://rapsodo.com/products/pro-2-ball-flight-monitor'},
+  pro3:{title:'Rapsodo PRO 3.0 · USD 8,500',url:'https://rapsodo.com/products/rapsodo-pro-3-ball-flight-monitor'},
+  rapPricing:{title:'Rapsodo 官方方案價表',url:'https://rapsodo.com/blogs/baseball/rapsodo-demystified-for-coaches'},
+  rapMembership:{title:'Rapsodo 必要會員 · Team USD 1,500/年',url:'https://rapsodo.com/pages/rapsodo-baseball-pro-series-membership'},
+  rapFAQ:{title:'Rapsodo 安裝與資料匯出 FAQ',url:'https://rapsodo.com/pages/baseball-frequently-asked-questions-faq'},
+  rapMount:{title:'Rapsodo Japan 官方 PRO 3.0 安裝',url:'https://note-rapsodojp.rapsodo.com/n/n715565f9db54'},
+  b1:{title:'TrackMan B1 · 硬體需詢價',url:'https://www.trackman.com/baseball/Portable-B1/get-your-own'},
+  b1Specs:{title:'TrackMan B1 原廠規格 · 2026',url:'https://support.trackmanbaseball.com/hc/en-us/articles/47739391155099-B1-Unit-Technical-Specifications'},
+  b1Shop:{title:'TrackMan B1 軟體訂閱 · USD 2,500/期',url:'https://shop.trackmangolf.com/collections/baseball'},
+  b1API:{title:'TrackMan Data API · 另購授權',url:'https://support.trackmanbaseball.com/hc/en-us/articles/5089419125403-Data-Data-API-Introduction'},
+  b1Live:{title:'B1 Live Feed · iPad後約3秒目標（2026-05）',url:'https://support.trackmanbaseball.com/hc/en-us/articles/5089771759003-B1-App-Trackman-Data-Feeds-Live-Play-by-Play'},
+  b1Mount:{title:'B1 官方安裝與校正 · 2026',url:'https://support.trackmanbaseball.com/hc/en-us/articles/48455405166747-B1-App-Pitching-Calibration-Steps'},
+  x3b:{title:'FlightScope X3B · USD 15,995套裝 / Cloud另計',url:'https://flightscope.com/pages/baseball'},
 };
 export const bom = [
   {id:'T01',item:'球路相機 ×2',qty:2,low:15000,high:19000,model:'a2A1920-160umBAS',source:'baslerPrice'},
@@ -55,5 +69,5 @@ export const gates = [
   ['牛棚','W13–20','固定化與維護','防護、局部網路、重裝校正與操作SOP。'],
 ];
 export const fmtMoney = value => 'NT$'+value.toLocaleString('en-US');
-export function publicPlan(){return {plan:PLAN,scope:'planning_only_no_hardware_results',bom,budget:budgetTotals(),bullpen:bullpenBudget,expansion:expansionBudget,latency,acceptance,gates,sources};}
+export function publicPlan(){return {plan:PLAN,solution_variant:'build',scope:'planning_only_no_hardware_results',price_basis:'engineering_allowance_not_turnkey_quote',bom,budget:budgetTotals(),bullpen:bullpenBudget,expansion:expansionBudget,latency,acceptance,gates,sources};}
 export function bomCSV(){const t=budgetTotals();const rows=[['ID','品項','型號/備註','數量','預留低單價NTD','預留高單價NTD','低小計','高小計','基準日','狀態'],...bom.map(r=>[r.id,r.item,r.model,r.qty,r.low,r.high,r.qty*r.low,r.qty*r.high,PLAN.date,'工程預留非正式報價']),['TOTAL','含15%風險預留','','','','',t.totalLow,t.totalHigh,PLAN.date,'參考儀另借/另計，性能待驗證']];return '\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');}

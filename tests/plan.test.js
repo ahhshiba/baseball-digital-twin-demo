@@ -5,6 +5,7 @@ import { getNodes } from '../src/nodes.js';
 import { activityBoundary, insidePolygon, boundaryDistance } from '../src/deployment.js';
 import { opticsEstimate, observationGeometry, toWorld, toScene, syntheticAxes } from '../src/optics.js';
 import { makeRecord, makePitch } from '../src/pitch.js';
+import { purchaseProducts, purchaseEstimate, purchaseAssumptions, priceAudit, variantPlan, purchaseCSV, parsePlanHash, getPurchaseNodes } from '../src/procurement.js';
 
 test('v3 budget is identical to the reviewed plan; cumulative stages are not additive',()=>{
   assert.deepEqual(budgetTotals(),{low:133000,high:191000,reserveLow:19950,reserveHigh:28650,totalLow:152950,totalHigh:219650});
@@ -60,11 +61,55 @@ test('scene/world mapping round trips vectors, and field spin geometry triggers 
 });
 test('visual spin is synthetic while direct measurements and latency stay null',()=>{
   const r=makeRecord(makePitch('FF'),'poc',1);
-  assert.equal(r.plan_version,'3.0');assert.equal(r.synthetic_spin.measurement,false);
+  assert.equal(r.plan_version,PLAN.version);assert.equal(r.synthetic_spin.measurement,false);
   assert.equal(r.synthetic_spin.source,'synthetic-preset');assert.equal(r.metrics.spin_axis,null);
   assert.equal(r.measurements.spin_axis_world,null);assert.equal(r.measurements.spin_rpm,null);
   assert.equal(r.measurements.sample_to_visible_ms,null);assert.equal(r.measurements.validity,'not-connected');
   assert.equal(r.measurement_requirements.direct_spin_phase_one,true);
   assert.equal(r.world_trajectory.samples.length,r.trajectory.samples.length);
   assert.deepEqual(r.world_trajectory.samples[0].position_m,toWorld(r.trajectory.samples[0].position_m));
+});
+
+test('purchase prices keep quantity, annual fees and multi-year arithmetic explicit',()=>{
+  const expected={'pro2-pitch':[199200,232400,295200,328400],'pro2-combo':[234400,270800,330400,366800],pro3:[375200,424400,471200,520400],x3b:[604864,666048,668544,729728]};
+  for(const p of purchaseProducts.filter(p=>p.hardwareUsd!==null)){
+    const e=purchaseEstimate(p);
+    assert.deepEqual([e.firstYearLow,e.firstYearHigh,e.threeYearLow,e.threeYearHigh],expected[p.id]);
+    assert.equal(e.annualTwd,p.annualUsd*32);assert.equal(e.complete,false);
+  }
+  assert.equal(purchaseAssumptions.fx,32);assert.equal(priceAudit.length,3);
+  assert.throws(()=>purchaseEstimate(purchaseProducts[1],0),RangeError);
+});
+test('unknown B1 hardware and API costs are never converted to free or a turnkey total',()=>{
+  const p=purchaseProducts.find(p=>p.id==='b1'),e=purchaseEstimate(p);
+  for(const k of ['hardwareTwd','annualTwd','firstYearLow','firstYearHigh','threeYearLow','threeYearHigh'])assert.equal(e[k],null);
+  assert.equal(p.subscriptionReferenceUsd,2500);assert.equal(p.annualUsd,null);
+  const data=variantPlan('buy');assert.equal(data.allRequirementsVerified,false);assert.equal(data.sample_to_visible_measured_ms,null);
+  assert.equal(data.products[0].estimate.firstYearLow,null);assert.ok(data.excludedCosts.includes('integration_NRE'));
+  const csv=purchaseCSV();assert.equal(csv.charCodeAt(0),0xfeff);assert.equal(csv.split('\r\n').length,6);assert.match(csv,/待報價/);
+});
+test('legacy and variant-specific deep links preserve separate modes',()=>{
+  assert.deepEqual(parsePlanHash('#poc/plan'),{variant:'build',stage:'poc',panel:'plan'});
+  assert.deepEqual(parsePlanHash('#buy/bullpen/flow'),{variant:'buy',stage:'bullpen',panel:'flow'});
+  assert.deepEqual(parsePlanHash('#build/full/spin'),{variant:'build',stage:'full',panel:'spin'});
+  assert.deepEqual(parsePlanHash('#buy/bad/bad'),{variant:'buy',stage:'poc',panel:'nodes'});
+  assert.equal(variantPlan().solution_variant,'build');assert.equal(variantPlan('buy').solution_variant,'buy');
+  assert.throws(()=>variantPlan('free'),RangeError);
+});
+test('purchase concept stays outside the activity area without placing Rapsodo between players',()=>{
+  for(const stage of ['poc','bullpen','pilot','full']){
+    const nodes=getPurchaseNodes(stage),poly=activityBoundary(stage);
+    assert.equal(nodes.length,2);assert.equal(nodes.filter(n=>n.type==='vendor').length,1);
+    for(const n of nodes)for(let i=0;i<=10;i++){
+      const p=[n.pos[0]+(n.anchor[0]-n.pos[0])*i/10,n.pos[2]+(n.anchor[2]-n.pos[2])*i/10];
+      assert.equal(insidePolygon(p,poly),false);assert.ok(boundaryDistance(p,poly)>.65);
+    }
+  }
+  assert.throws(()=>getPurchaseNodes('invalid'),RangeError);
+});
+test('buy-mode recordings remain synthetic and do not claim raw or measured rotation',()=>{
+  const r=makeRecord(makePitch('SL'),'poc',1,'buy');
+  assert.equal(r.solution_variant,'buy');assert.equal(r.source,'synthetic');
+  assert.equal(r.measurements.spin_axis_world,null);assert.equal(r.measurements.sample_to_visible_ms,null);
+  assert.equal(r.measurement_requirements.direct_spin_phase_one,true);assert.deepEqual(r.acquisition.radar_iq,[]);
 });

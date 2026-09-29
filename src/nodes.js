@@ -5,8 +5,8 @@ export const stages = [
   {id:'pilot',name:'局部擴充',short:'P2',subtitle:'球場局部 · 擊球研究',budget:'總硬體100萬內分配',timing:'一期通過後',description:'增加打擊視角，60GHz / FPGA以選配研究呈現。全場場外長距離的球縫可觀測性須重新驗證。'},
   {id:'full',name:'全場構想',short:'P3',subtitle:'全場 · 覆蓋與守備研究',budget:'100萬為封頂構想',timing:'另案驗證',description:'展示OAA-like資料需求，不保證此節點數足以全場追球，也不代表100萬即可交付正式ABS。'},
 ];
-export const colors={camera:'#63a9ff',spin:'#c29eff',radar24:'#f0a967',radar60:'#ca87e9',edge:'#60d6aa',fpga:'#75d4d7',sync:'#9ebcc8',light:'#f7d483'};
-export const typeNames={camera:'球路光學相機',spin:'球縫高速相機 · 一期必要',radar24:'24 GHz · 原始 I/Q',radar60:'60 GHz · 選配研究',edge:'PC 邊緣運算',fpga:'FPGA · 平行研發',sync:'同步 / 隔離觸發',light:'短脈衝照明'};
+export const colors={camera:'#63a9ff',spin:'#c29eff',radar24:'#f0a967',radar60:'#ca87e9',edge:'#60d6aa',fpga:'#75d4d7',sync:'#9ebcc8',light:'#f7d483',vendor:'#75d3c0'};
+export const typeNames={camera:'球路光學相機',spin:'球縫高速相機 · 一期必要',radar24:'24 GHz · 原始 I/Q',radar60:'60 GHz · 選配研究',edge:'PC / 應用節點',fpga:'FPGA · 平行研發',sync:'同步 / 隔離觸發',light:'短脈衝照明',vendor:'整合式成品 · 非raw介面'};
 const n=(id,name,type,target,model,role,raw,extra={})=>({id,name,type,pos:[0,0,0],target,model,role,raw,required:true,...extra});
 const spinTarget=[0,1.7,-16];
 const core=[

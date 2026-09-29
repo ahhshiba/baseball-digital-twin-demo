@@ -2,7 +2,9 @@ import './style.css';
 import './workbench.css';
 import './actor-controls.css';
 import './planning.css';
-import { PLAN, bomCSV, publicPlan } from './plan.js';
+import { PLAN, bomCSV } from './plan.js';
+import { buyStages, getPurchaseNodes, parsePlanHash, variantPlan, purchaseCSV } from './procurement.js';
+import { buyPlanHTML, buySpinHTML, buyFlowHTML } from './procurement-ui.js';
 import { planHTML, spinHTML, flowHTML, sourceLink } from './planning-ui.js';
 import { opticsEstimate, observationGeometry, syntheticAxes, toWorld } from './optics.js';
 import { stages, colors, typeNames, getNodes } from './nodes.js';
@@ -12,18 +14,19 @@ import { FieldScene } from './scene.js';
 
 const $=s=>document.querySelector(s);
 const panels=['dashboard','nodes','spin','plan','metrics','flow'];
-const requested=location.hash.slice(1).split('/');
-let stage=stages.some(s=>s.id===requested[0])?requested[0]:'poc',site='pen',nearView=false,selected='cam-c',activePanel=panels.includes(requested[1])?requested[1]:'nodes';
+const requested=parsePlanHash(location.hash);
+let variant=requested.variant,stage=requested.stage,site='pen',nearView=false,selected='cam-c',activePanel=requested.panel;
 const options={fpga:false,radar60:false};
-let type='FF',scenario='strike',heightCm=180,playing=false,startTime=0,playPitch=null,playStage=null;
+let type='FF',scenario='strike',heightCm=180,playing=false,startTime=0,playPitch=null,playStage=null,playVariant=null;
 let records=[],storageAvailable=true;
 try { const stored=JSON.parse(localStorage.getItem('fieldlab-demo-v2')||'[]');records=Array.isArray(stored)?stored.filter(r=>r?.schema_version==='demo-pitch/2.0'&&r.source==='synthetic'&&Object.hasOwn(PITCHES,r.pitch_type?.label)&&Number.isFinite(r.metrics?.release_speed_kmh)&&['STRIKE','BALL','REVIEW'].includes(r.abs?.call)).slice(-60):[]; }catch{storageAvailable=false}
-let pitch=makePitch(type,scenario,heightCm),nodes=getNodes(stage,nearView,options);
+const activeNodes=()=>variant==='buy'?getPurchaseNodes(stage):getNodes(stage,nearView,options);
+let pitch=makePitch(type,scenario,heightCm),nodes=activeNodes();
 
-$('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}">
-  <header class="topbar"><div class="identity"><div class="mark">◈</div><div><span class="overline">FIELD LAB / DIGITAL TWIN</span><h1>棒球數位孿生<span class="plan-badge">PLAN v3.0</span></h1></div></div>
+$('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-variant="${variant}">
+  <header class="topbar"><div class="identity"><div class="mark">◈</div><div><span class="overline">FIELD LAB / DIGITAL TWIN</span><h1>棒球數位孿生<span class="plan-badge">PLAN v${PLAN.version}</span></h1></div></div>
     <div class="header-note"><span class="signal"></span>直接旋轉一期必驗 · 模擬資料</div><a class="source-link" href="https://github.com/ahhshiba/baseball-digital-twin-demo" target="_blank" rel="noopener">GitHub ↗</a></header>
-  <div class="stagebar"><div class="stagebar-label">部署情境<span>STAGES</span></div><div class="stage-buttons" id="stages"></div>
+  <div class="stagebar"><div class="solution-switch" role="group" aria-label="方案版本"><button data-variant="build" aria-pressed="false"><b>A 自研量測</b><span>開放感測器＋自研演算法</span></button><button data-variant="buy" aria-pressed="false"><b>B 成品應用</b><span>購買整機＋授權資料整合</span></button><p id="variant-note"></p></div><div class="stagebar-label">部署情境<span>STAGES</span></div><div class="stage-buttons" id="stages"></div>
     <div class="site-toggle" id="site-toggle" hidden><button data-site="lab">室內</button><button data-site="pen">牛棚</button></div>
     <div class="site-toggle" id="scene-toggle" hidden><button data-scene="near">球縫觀測區</button><button data-scene="plate">本壘量測</button></div>
     <span class="stage-note">0.8 秒：取樣 → 畫面 · 工程目標</span></div>
@@ -51,22 +54,28 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}">
       <div class="export-row"><button id="export-json">匯出 JSON</button><button id="export-csv">匯出 CSV</button></div><p class="mini-note" id="storage-note"></p>
     </section>
     <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="stage-extras"><label><input id="option-fpga" type="checkbox">FPGA 平行研發</label><label><input id="option-radar60" type="checkbox">60GHz ADC 選配</label></div><p class="optional-note" id="optional-note"></p><div class="disclaimer">場內淨空：相機、雷達、機櫃與固定支架均配置於示意活動區外；界外區也可能是球員活動區。支架代表待場勘確認的剛性結構，不能固定在柔性網面。線材沿場外線槽，避免跨越動線。<br>點「活動區界線」查看範圍；綠色圓環為設備投影示意，不是核准安全距離。</div><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
-    <section id="metrics-panel" hidden>${capabilityHTML()}</section>
-    <section id="spin-panel" hidden>${spinHTML()}</section>
-    <section id="plan-panel" hidden>${planHTML()}</section>
-    <section id="flow-panel" hidden>${flowHTML()}</section>
-  </div><div class="panel-foot">v3.0 · 2026-09-28規劃 · 未連感測器 / 非正式ABS</div></aside></div></div>`;
+    <section id="metrics-panel" hidden><p id="metrics-variant" class="disclaimer"></p>${capabilityHTML()}</section>
+    <section id="spin-panel" hidden><div data-version-content="build">${spinHTML()}</div><div data-version-content="buy" hidden>${buySpinHTML()}</div></section>
+    <section id="plan-panel" hidden><div data-version-content="build">${planHTML()}</div><div data-version-content="buy" hidden>${buyPlanHTML()}</div></section>
+    <section id="flow-panel" hidden><div data-version-content="build">${flowHTML()}</div><div data-version-content="buy" hidden>${buyFlowHTML()}</div></section>
+  </div><div class="panel-foot">v${PLAN.version} · ${PLAN.priceChecked}價格查核 · 未連感測器 / 非正式ABS</div></aside></div></div>`;
 
 const field=new FieldScene($('#scene'),$('#labels'),id=>{selected=id;field.select(id);updateDetail();setPanel('nodes')});
 function setPanel(name){
   if(!panels.includes(name))return;activePanel=name;
   document.querySelectorAll('[data-panel]').forEach(b=>{const active=b.dataset.panel===name;b.classList.toggle('active',active);b.setAttribute('aria-selected',active);b.tabIndex=active?0:-1;b.id='tab-'+b.dataset.panel;b.setAttribute('aria-controls',b.dataset.panel+'-panel')});
   for(const p of panels){const section=$(`#${p}-panel`);section.hidden=p!==name;section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','tab-'+p)}
-  $('.panel-scroll').scrollTop=0;history.replaceState(null,'',`#${stage}/${name}`);
+  $('.panel-scroll').scrollTop=0;history.replaceState(null,'',`#${variant}/${stage}/${name}`);
 }
 document.querySelectorAll('[data-panel]').forEach(b=>{
   b.onclick=()=>setPanel(b.dataset.panel);
   b.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const i=panels.indexOf(b.dataset.panel),j=e.key==='Home'?0:e.key==='End'?panels.length-1:(i+(e.key==='ArrowRight'?1:-1)+panels.length)%panels.length;setPanel(panels[j]);document.querySelector(`[data-panel="${panels[j]}"]`).focus()};
+});
+document.querySelectorAll('button[data-variant]').forEach(b=>b.onclick=()=>{
+  stopPlayback();variant=b.dataset.variant;renderStage();setPanel(activePanel);
+});
+window.addEventListener('hashchange',()=>{
+  const route=parsePlanHash(location.hash);stopPlayback();variant=route.variant;stage=route.stage;activePanel=route.panel;renderStage();setPanel(activePanel);
 });
 for(const key of ['fpga','radar60'])$(`#option-${key}`).onchange=e=>{stopPlayback();options[key]=e.target.checked;renderStage()};
 for(const id of ['camera','mode','focal','exposure','speed','rpm'])$(`#optics-${id}`).addEventListener('input',renderOptics);
@@ -74,23 +83,37 @@ $('#axis-toggle').onclick=()=>{field.showSpinAxis=!field.showSpinAxis;field.spin
 $('#measurement-zone').onclick=()=>{field.measurementZone.visible=!field.measurementZone.visible;$('#measurement-zone').setAttribute('aria-pressed',field.measurementZone.visible)};
 $('#spin-focus').onclick=()=>{field.setView('spin');setPanel('spin')};
 $('#export-bom').onclick=()=>download(bomCSV(),'fieldlab-v3-public-bom.csv','text/csv;charset=utf-8');
-$('#export-plan').onclick=()=>download(JSON.stringify(publicPlan(),null,2),'fieldlab-v3-public-plan.json','application/json');
+$('#export-plan').onclick=()=>download(JSON.stringify(variantPlan('build'),null,2),'fieldlab-v31-build-plan.json','application/json');
+$('#export-buy-csv').onclick=()=>download(purchaseCSV(),'fieldlab-v31-buy-comparison.csv','text/csv;charset=utf-8');
+$('#export-buy-plan').onclick=()=>download(JSON.stringify(variantPlan('buy'),null,2),'fieldlab-v31-buy-plan.json','application/json');
 
 
 function renderStage(){
-  const info=stages.find(s=>s.id===stage);
-  $('#stages').innerHTML=stages.map(s=>`<button data-stage="${s.id}" aria-pressed="${s.id===stage}" class="${s.id===stage?'active':''}"><small>${s.short}</small>${s.name}</button>`).join('');
+  const buying=variant==='buy',activeStages=buying?buyStages:stages,info=activeStages.find(s=>s.id===stage);
+  $('.app').dataset.variant=variant;
+  document.querySelectorAll('button[data-variant]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.variant===variant));
+  document.querySelectorAll('[data-version-content]').forEach(el=>el.hidden=el.dataset.versionContent!==variant);
+  $('#variant-note').textContent=buying?'成品解算結果 ≠ 開放raw；目前無全部硬需求達標保證':'買開放感測器、自研核心量測；不是低價自製RF晶片/整機';
+  $('.plan-line').textContent=buying?'成品B1場外概念 · API / 價格 / 延遲待驗':'四相機＋原始 I/Q · 一期直接轉速與三維軸';
+  $('.stage-note').textContent=buying?'800ms仍是需求，成品API未證明符合':'0.8 秒：取樣 → 畫面 · 工程目標';
+  $('.stage-extras').hidden=buying;
+  $('#metrics-variant').textContent=buying?'B版：下列為共同資料需求，不代表成品已輸出所有欄位。未授權raw、缺失3D軸、場外事件一律留空。':'A版：由L0/L1自行完成量測；計畫預算不是精度或完整投打守的交付保證。';
+  $('[data-panel="flow"]').textContent=buying?'成品介接':'0.8秒流程';
+  $('[data-panel="spin"]').textContent=buying?'旋轉驗收':'直接旋轉';
+  $('#measurement-zone').disabled=$('#spin-focus').disabled=buying;
+  field.measurementZone.visible=!buying&&$('#measurement-zone').getAttribute('aria-pressed')==='true';
+  $('#stages').innerHTML=activeStages.map(s=>`<button data-stage="${s.id}" aria-pressed="${s.id===stage}" class="${s.id===stage?'active':''}"><small>${s.short}</small>${s.name}</button>`).join('');
   document.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>{stopPlayback();stage=b.dataset.stage;renderStage();setPanel(activePanel)});
-  $('#site-toggle').hidden=stage!=='poc';$('#scene-toggle').hidden=!['poc','bullpen'].includes(stage);
+  $('#site-toggle').hidden=stage!=='poc';$('#scene-toggle').hidden=buying||!['poc','bullpen'].includes(stage);
   document.querySelectorAll('[data-site]').forEach(b=>{b.classList.toggle('active',b.dataset.site===site);b.onclick=()=>{stopPlayback();site=b.dataset.site;renderStage()}});
   document.querySelectorAll('[data-scene]').forEach(b=>{b.onclick=()=>{nearView=b.dataset.scene==='near';field.setView(nearView?'spin':'plate')}});
-  $('#scene-title').textContent=stage==='poc'?`${site==='lab'?'室內':'牛棚'} · 一期直接旋轉 PoC`:info.subtitle;
-  $('#stage-brief').innerHTML=`<small>PLAN v3.0 / ${info.short} / ${info.timing}</small><strong>${info.budget}</strong><p>直接旋轉一期必驗 · 800ms為取樣至畫面目標 · 尚未實測</p>`;
-  $('#phase-tag').textContent=`${info.short} / OPEN SENSORS`;$('#phase-name').textContent=info.name;$('#phase-desc').textContent=info.description;
-  $('#optional-note').textContent=options.fpga||options.radar60?'選配僅顯示研究位置，未加進一期BOM。60GHz另預留3–6萬；牛棚47萬全用滿時可能超過50萬。':'主案未啟用FPGA / 60GHz。先CPU完成量測，以實測瓶頸決定加速。';
-  nodes=getNodes(stage,nearView,options);if(!nodes.some(n=>n.id===selected))selected=nodes[0].id;
-  const sensorCount=nodes.filter(n=>['camera','spin','radar24','radar60'].includes(n.type)).length;
-  $('#node-count').textContent=`${sensorCount} 感測來源 / ${nodes.length} 設備盒體`;
+  $('#scene-title').textContent=buying?info.subtitle:stage==='poc'?`${site==='lab'?'室內':'牛棚'} · 一期直接旋轉 PoC`:info.subtitle;
+  $('#stage-brief').innerHTML=`<small>PLAN v${PLAN.version} / ${buying?'B成品':'A自研'} / ${info.short} / ${info.timing}</small><strong>${info.budget}</strong><p>${buying?'B1公開feed約iPad後3秒目標 · 非800ms · 不是raw':'直接旋轉一期必驗 · 工程預留非報價 · 尚未實測'}</p>`;
+  $('#phase-tag').textContent=`${info.short} / ${buying?'BUY & INTEGRATE':'OPEN SENSORS'}`;$('#phase-name').textContent=info.name;$('#phase-desc').textContent=info.description;
+  $('#optional-note').textContent=buying?'此場景僅B1安裝概念；Rapsodo投捕間部署與場內淨空衝突，未放入本版3D配置。FPGA不能解鎖成品raw或縮短其雲端等待。':options.fpga||options.radar60?'選配僅顯示研究位置，未加進一期BOM。60GHz另預留3–6萬；牛棚47萬全用滿時可能超過50萬。':'主案未啟用FPGA / 60GHz。先CPU完成量測，以實測瓶頸決定加速。';
+  nodes=activeNodes();if(!nodes.some(n=>n.id===selected))selected=nodes[0].id;
+  const sensorCount=nodes.filter(n=>['camera','spin','radar24','radar60','vendor'].includes(n.type)).length;
+  $('#node-count').textContent=buying?'1 整合式量測系統 / 1 應用節點':`${sensorCount} 感測來源 / ${nodes.length} 設備盒體`;
   $('#node-list').innerHTML=nodes.map(n=>`<button class="node" data-node="${n.id}"><i style="--c:${colors[n.type]}"></i><span><b>${n.name}</b><small class="${n.required?'':'node-option'}">${typeNames[n.type]}${n.required?'':' · 待驗擴充'}</small></span><em>→</em></button>`).join('');
   document.querySelectorAll('[data-node]').forEach(b=>b.onclick=()=>{selected=b.dataset.node;field.select(selected);updateDetail()});
   field.rebuild(stage,site,nodes);field.setPitch(pitch);field.select(selected);updateDetail();renderOptics();
@@ -160,8 +183,8 @@ for(const role of ['pitcher','catcher'])$(`#fade-${role}`).onchange=e=>{field.se
 $('#actor-opacity').oninput=e=>{field.setGhostOpacity(Number(e.target.value)/100);syncActorControls()};
 $('#labels-toggle').onclick=()=>{field.showLabels=!field.showLabels;$('#labels-toggle').setAttribute('aria-pressed',field.showLabels)};
 function stopPlayback(){playing=false;$('#play').disabled=false;$('#play').textContent='▶ 投一球並記錄';$('#simulation').hidden=true}
-$('#play').onclick=()=>{playing=true;startTime=performance.now();playPitch=pitch;playStage=stage;$('#play').disabled=true;$('#play').textContent='投球回放中…';$('#simulation').hidden=false;$('#progress-fill').style.width='0%'};
-field.onFrame=t=>{if(!playing)return;const u=Math.min((t-startTime)/2400,1);field.moveBall(u);$('#progress-fill').style.width=`${u*100}%`;$('#sim-event').textContent=u<.14?'釋球':u<.95?'飛行中':'通過判定平面';if(u===1){records.push(makeRecord(playPitch,playStage,records.length+1));records=records.slice(-60);try{localStorage.setItem('fieldlab-demo-v2',JSON.stringify(records))}catch{storageAvailable=false}stopPlayback();renderRecords()}};
+$('#play').onclick=()=>{playing=true;startTime=performance.now();playPitch=pitch;playStage=stage;playVariant=variant;$('#play').disabled=true;$('#play').textContent='投球回放中…';$('#simulation').hidden=false;$('#progress-fill').style.width='0%'};
+field.onFrame=t=>{if(!playing)return;const u=Math.min((t-startTime)/2400,1);field.moveBall(u);$('#progress-fill').style.width=`${u*100}%`;$('#sim-event').textContent=u<.14?'釋球':u<.95?'飛行中':'通過判定平面';if(u===1){records.push(makeRecord(playPitch,playStage,records.length+1,playVariant));records=records.slice(-60);try{localStorage.setItem('fieldlab-demo-v2',JSON.stringify(records))}catch{storageAvailable=false}stopPlayback();renderRecords()}};
 function renderRecords(){
   $('#record-count').textContent=`${records.length} 球 · 模擬`;
   $('#record-list').innerHTML=records.length?`<table class="record-table"><thead><tr><th>#</th><th>球種</th><th>km/h</th><th>判讀</th></tr></thead><tbody>${records.slice(-6).reverse().map((r,i)=>`<tr><td>${records.length-i}</td><td>${r.pitch_type.label}</td><td>${r.metrics.release_speed_kmh.toFixed(1)}</td><td class="${r.abs.call.toLowerCase()}">${callText[r.abs.call]}</td></tr>`).join('')}</tbody></table>`:'<div class="empty-records">按「投一球並記錄」開始。每球含軌跡取樣、球種來源、規則與品質欄位。</div>';
