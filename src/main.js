@@ -34,7 +34,7 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
     <span class="stage-note">0.8 秒：取樣 → 畫面 · 工程目標</span></div>
   <div class="main"><section class="viewport" aria-label="互動三維球場">
     <div id="scene"></div><div id="labels"></div>
-    <div class="scene-caption"><span class="eyebrow">INTERACTIVE FIELD VIEW</span><strong id="scene-title"></strong><span class="plan-line">四相機＋原始 I/Q · 一期直接轉速與三維軸</span><span>拖曳旋轉 · 滾輪縮放 · 點選感測器</span></div>
+    <div class="scene-caption"><span class="eyebrow">INTERACTIVE FIELD VIEW</span><strong id="scene-title"></strong><span class="plan-line">球路、旋轉與人物追蹤示意</span><span>拖曳旋轉 · 滾輪縮放 · 點選設備</span></div>
     <div class="scene-options"><button id="light" title="切換日夜" aria-pressed="false">☀ 日間</button><button id="coverage" aria-pressed="false">視野示意</button><button id="clearance" aria-pressed="false">活動區界線</button><button id="labels-toggle" aria-pressed="true">設備標籤</button></div>
     <div class="actor-tools"><button id="ghost-actors" aria-pressed="false" title="一鍵切換投手與捕手半透明">◉ 投捕手半透明</button><details id="actor-filter-options"><summary>過濾設定</summary><div class="actor-filter-body"><label><input type="checkbox" id="fade-pitcher">投手半透明</label><label><input type="checkbox" id="fade-catcher">捕手半透明</label><label class="opacity-control" for="actor-opacity">人物不透明度 <output id="opacity-value">25%</output></label><input id="actor-opacity" type="range" min="10" max="60" step="5" value="25"><small>僅影響畫面，球路與記錄不變。</small></div></details></div>
     <div id="filter-status" class="filter-status" hidden aria-live="polite"></div>
@@ -55,7 +55,7 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
       <div class="section-heading record-heading"><span>本機逐球記錄</span><small id="record-count"></small></div><div id="record-list"></div>
       <div class="export-row"><button id="export-json">匯出 JSON</button><button id="export-csv">匯出 CSV</button></div><p class="mini-note" id="storage-note"></p>
     </section>
-    <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="stage-extras"><label><input id="option-fpga" type="checkbox">FPGA 平行研發</label><label><input id="option-radar60" type="checkbox">60GHz ADC 選配</label></div><p class="optional-note" id="optional-note"></p><div class="disclaimer">場內淨空：相機、雷達、機櫃與固定支架均配置於示意活動區外；界外區也可能是球員活動區。支架代表待場勘確認的剛性結構，不能固定在柔性網面。線材沿場外線槽，避免跨越動線。<br>點「活動區界線」查看範圍；綠色圓環為設備投影示意，不是核准安全距離。</div><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
+    <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
     <section id="fullfield-panel" hidden>${fullFieldHTML()}</section>
     <section id="metrics-panel" hidden><p id="metrics-variant" class="disclaimer"></p>${capabilityHTML()}</section>
     <section id="spin-panel" hidden><div data-version-content="build">${spinHTML()}</div><div data-version-content="buy" hidden>${buySpinHTML()}</div></section>
@@ -80,7 +80,6 @@ document.querySelectorAll('button[data-variant]').forEach(b=>b.onclick=()=>{
 window.addEventListener('hashchange',()=>{
   const route=parsePlanHash(location.hash);stopPlayback();variant=route.variant;stage=route.stage;activePanel=route.panel==='plan'?'nodes':route.panel;renderStage();setPanel(activePanel);
 });
-for(const key of ['fpga','radar60'])$(`#option-${key}`).onchange=e=>{stopPlayback();options[key]=e.target.checked;renderStage()};
 for(const id of ['camera','mode','focal','exposure','speed','rpm'])$(`#optics-${id}`).addEventListener('input',renderOptics);
 $('#axis-toggle').onclick=()=>{field.showSpinAxis=!field.showSpinAxis;field.spinAxis.visible=field.showSpinAxis;$('#axis-toggle').setAttribute('aria-pressed',field.showSpinAxis)};
 $('#measurement-zone').onclick=()=>{field.measurementZone.visible=!field.measurementZone.visible;$('#measurement-zone').setAttribute('aria-pressed',field.measurementZone.visible)};
@@ -91,9 +90,8 @@ function renderStage(){
   document.querySelectorAll('button[data-variant]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.variant===variant));
   document.querySelectorAll('[data-version-content]').forEach(el=>el.hidden=el.dataset.versionContent!==variant);
   $('#variant-note').textContent=buying?'成品解算結果 ≠ 開放raw；目前無全部硬需求達標保證':'買開放感測器、自研核心量測；不是低價自製RF晶片/整機';
-  $('.plan-line').textContent=buying?'成品B1場外概念 · API / 價格 / 延遲待驗':'四相機＋原始 I/Q · 一期直接轉速與三維軸';
+  $('.plan-line').textContent='球路、旋轉與人物追蹤示意';
   $('.stage-note').textContent=buying?'800ms仍是需求，成品API未證明符合':'0.8 秒：取樣 → 畫面 · 工程目標';
-  $('.stage-extras').hidden=buying;
   $('#metrics-variant').textContent=buying?'B版：下列為共同資料需求，不代表成品已輸出所有欄位。未授權raw、缺失3D軸、場外事件一律留空。':'A版：由L0/L1自行完成量測；計畫預算不是精度或完整投打守的交付保證。';
   $('[data-panel="flow"]').textContent=buying?'成品介接':'0.8秒流程';
   $('[data-panel="spin"]').textContent=buying?'旋轉驗收':'直接旋轉';
@@ -106,8 +104,7 @@ function renderStage(){
   document.querySelectorAll('[data-scene]').forEach(b=>{b.onclick=()=>{nearView=b.dataset.scene==='near';field.setView(nearView?'spin':'plate')}});
   $('#scene-title').textContent=buying?info.subtitle:stage==='poc'?`${site==='lab'?'室內':'牛棚'} · 一期直接旋轉 PoC`:info.subtitle;
   $('#stage-brief').innerHTML=`<small>PLAN v${PLAN.version} / ${buying?'B成品':'A自研'} / ${info.short} / ${info.timing}</small><strong>${info.budget}</strong><p>${buying?'B1公開feed約iPad後3秒目標 · 非800ms · 不是raw':stage==='poc'||stage==='bullpen'?'直接旋轉一期必驗 · 工程預留非報價 · 尚未實測':'全場球員／守備研究 · 合成展示 · 尚未實測'}</p>`;
-  $('#phase-tag').textContent=`${info.short} / ${buying?'BUY & INTEGRATE':'OPEN SENSORS'}`;$('#phase-name').textContent=info.name;$('#phase-desc').textContent=info.description;
-  $('#optional-note').textContent=buying?'此場景僅B1安裝概念；Rapsodo投捕間部署與場內淨空衝突，未放入本版3D配置。FPGA不能解鎖成品raw或縮短其雲端等待。':stage==='pilot'||stage==='full'?'全場節點F01–F08是場外候選站；6站先導、8站追加。人物相機不自動等於遠端球縫可用，覆蓋、焦段、同步與安全仍待現場驗證。':options.fpga||options.radar60?'選配僅顯示研究位置，未加進一期BOM。60GHz另預留3–6萬；牛棚47萬全用滿時可能超過50萬。':'主案未啟用FPGA / 60GHz。先CPU完成量測，以實測瓶頸決定加速。';
+  $('#phase-tag').textContent=`${info.short} / ${buying?'PURCHASED':'SELF-DEVELOPED'}`;$('#phase-name').textContent=info.name;$('#phase-desc').textContent=buying?'成品設備場外安裝示意':stage==='poc'?'投捕區量測設備位置示意':stage==='bullpen'?'牛棚量測設備位置示意':'場外相機與追蹤節點示意';
   nodes=activeNodes();if(!nodes.some(n=>n.id===selected))selected=nodes[0].id;
   const sensorCount=nodes.filter(n=>['camera','spin','radar24','radar60','vendor'].includes(n.type)).length;
   $('#node-count').textContent=buying?'1 整合式量測系統 / 1 應用節點':`${sensorCount} 感測來源 / ${nodes.length} 設備盒體`;
