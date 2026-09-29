@@ -56,14 +56,14 @@ export function makePitch(type = 'FF', scenario = 'strike', heightCm = 180) {
   return pitch;
 }
 
-export function makeRecord(pitch, stage, index, variant='build') {
+export function makeRecord(pitch, stage, index, variant='build', { id = null, recordedAt } = {}) {
   const endV = velocityAt(pitch, pitch.duration);
   const samples = Array.from({ length: 241 }, (_, i) => {
     const t = pitch.duration * i / 240;
     return { t_s: t, position_m: positionAt(pitch, t), velocity_mps: velocityAt(pitch, t) };
   });
   return {
-    schema_version: 'demo-pitch/2.0', id: `demo-${Date.now()}-${index}`, recorded_at: new Date().toISOString(),
+    schema_version: 'demo-pitch/2.0', id: id ?? `demo-${Date.now()}-${index}`, recorded_at: recordedAt === undefined ? new Date().toISOString() : recordedAt,
     source: 'synthetic', stage, plan_version: PLAN.version, solution_variant: variant, coordinate_frame: 'home-rear-tip:x-catcher-right,y-up,z-catcher;m',
     plan_world_frame: 'home-rear-tip:x-catcher-right,y-pitcher,z-up;m',
     coordinate_mapping: 'scene[x,y,z] -> world[x,-z,y]',
@@ -87,4 +87,15 @@ export function makeRecord(pitch, stage, index, variant='build') {
     world_trajectory: {source:'synthetic', samples:samples.map(s=>({t_s:s.t_s,position_m:toWorld(s.position_m),velocity_mps:toWorld(s.velocity_mps)}))},
     game_events: null, fielding_tracks: [], latency_ms: null,
   };
+}
+
+export const SCENARIOS = ['strike', 'ball', 'edge', 'occluded'];
+// Fixed 32-record fixture set (A/B × 4 pitch types × 4 scenarios, 241 points each); deterministic, synthetic.
+export function syntheticPitchPackage(heightCm = 180) {
+  const records = [];
+  for (const variant of ['build', 'buy']) for (const type of Object.keys(PITCHES)) for (const scenario of SCENARIOS)
+    records.push(makeRecord(makePitch(type, scenario, heightCm), 'poc', records.length + 1, variant,
+      { id: `syn-${variant}-${type}-${scenario}`, recordedAt: null }));
+  return { schema_version: 'synthetic-pitches/1.0', source: 'synthetic', count: records.length,
+    note: '合成投球；measurements.spin_rpm / spin_axis_world / sample_to_visible_ms 保持 null。', records };
 }

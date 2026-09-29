@@ -47,7 +47,8 @@ export function applyMounts(nodes,stage,nearView){
   const field=stage==='pilot'||stage==='full';
   return nodes.map(n=>{
     let mount;
-    if(field)mount=fieldMounts[n.id];
+    if(n.station)mount={pos:n.pos,anchor:n.anchor,place:n.place};
+    else if(field)mount=fieldMounts[n.id];
     else if(n.id==='cam-a'||n.id==='cam-b'){
       const side=n.id==='cam-a'?-1:1;
       mount=side<0?{pos:[-3.5,3,5],anchor:[-3.5,3,5.5],place:'捕手後方網外剛性結構'}
@@ -63,7 +64,9 @@ export function applyMounts(nodes,stage,nearView){
     const clearance=boundaryDistance([mount.pos[0],mount.pos[2]],activityBoundary(stage));
     let tradeoff=field?'長距離須重新選焦段、驗證球體像素與交會角；網子、觀眾及結構遮擋需現場確認。':'隔網成像須驗證對焦、網紋遮擋與曝光；固定在剛性結構，不固定在會晃動的網面。';
     if(n.type==='spin')tradeoff=field?'場外距離約32m以上；不能沿用牛棚焦段就宣稱球縫直接旋轉可用。須重選高解析高速光學、獨立驗證；失敗不能改成球路推估值交付。':'50mm僅為試算起點；點「直接旋轉」檢查當前觀測距離、球像與停留影格。幾何合格仍不等於未標記球實測達標。';
+    if(n.type==='player')tradeoff='高處廣角看得見人，但60m寬、2448px時棒球只有約3px；球員身分與小球是不同光學任務。高度、載重、防墜、雷雨與維護動線須場方確認。';
     if(field&&n.type==='radar60')tradeoff='移到活動區外後，距離與雜波可能使高速小球不可測；驗證失敗時省略此節點，不移回場內。';
     return {...n,...mount,name:n.name,mountKind:['edge','fpga','sync'].includes(n.type)?'cabinet':'structure',clearanceM:clearance,tradeoff};
   });
 }
+

@@ -1,5 +1,5 @@
 // Public planning estimates from 2026-09-28 v3.0, not measured performance.
-export const PLAN = Object.freeze({version:'3.1', date:'2026-09-28', updated:'2026-09-29', priceChecked:'2026-09-29', latencyMs:800,
+export const PLAN = Object.freeze({version:'4.2', date:'2026-09-28', updated:'2026-09-29', baselineCommit:'40b2396b08d330de988c55501f142d86bbcbe629', priceChecked:'2026-09-29', latencyMs:800,
   directSpinRequired:true, source:'public-planning-summary', fxUsdTwd:32});
 export const sources = {
   basler:{title:'Basler 原廠規格',url:'https://docs.baslerweb.com/a2a1920-160umbas'},

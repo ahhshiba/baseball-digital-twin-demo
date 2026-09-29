@@ -134,7 +134,6 @@ export class FieldScene {
         for(let col=0;col<8;col++)for(let row=0;row<2;row++){const bulbs=this.box(.43,.48,.08,'#fff6d7',[x-2+col*.57,28.65+row*.72,z+.28]);bulbs.material.emissive=new THREE.Color('#fff0c9');bulbs.material.emissiveIntensity=1.2}
       }
       this.net([-9,5],[9,5],5);this.net([-9,5],[-15,-4],5);this.net([9,5],[15,-4],5);
-      if(this.stage==='full')for(const [i,x,z] of [[3,18,-23],[4,11,-35],[5,-19,-24],[6,-12,-34],[7,-36,-66],[8,0,-84],[9,36,-66]])this.player([x,0,z],'fielder',i);
     }else{
       this.patch([[-10,7],[10,7],[10,-24],[-10,-24]],lab?'#b2b8b5':'#657c59',-.04);
       this.patch([[-3,4],[3,4],[3,-21],[-3,-21]],'#6b915a',0,this.grass);
@@ -151,8 +150,9 @@ export class FieldScene {
     this.disk(2.5,'#d3b38b',0,.0,.034,this.dirt);
     this.patch([[0,0],[-.2159,-.2159],[-.2159,-.4318],[.2159,-.4318],[.2159,-.2159]],'#fff5da',.048);
     for(const x of [-1,1])this.line([[x-.3,.05,.38],[x+.3,.05,.38],[x+.3,.05,-1.45],[x-.3,.05,-1.45],[x-.3,.05,.38]],'#f4edda');
-    this.player([0,.26,PLATE.rubberZ],'pitcher',17);this.player([0,0,1.1],'catcher',2);
-    if(isField)this.player([-.95,0,-.2],'batter',8);
+    // Full-field players come from the synthetic fielding layer instead of fixed props.
+    if(this.stage!=='full'){this.player([0,.26,PLATE.rubberZ],'pitcher',17);this.player([0,0,1.1],'catcher',2)}
+    if(this.stage==='pilot')this.player([-.95,0,-.2],'batter',8);
   }
   player(pos,role,num){
     const g=makeAthlete(role,num);g.position.set(...pos);this.root.add(g);this.actors.push(g);
@@ -160,6 +160,49 @@ export class FieldScene {
     setActorOpacity(g,this.actorFilters[role]?this.ghostOpacity:1);originals.forEach(m=>m.dispose());
     if(role==='pitcher')this.pitcher=g;
     return g;
+  }
+  buildFielding(){
+    const numbers={P:17,C:2,'1B':3,'2B':4,SS:6,'3B':5,LF:7,CF:8,RF:9,BR:24,R1:11,R2:12,R3:13};
+    this.fieldGroup=new THREE.Group();this.root.add(this.fieldGroup);this.fieldActors=new Map();
+    const flat=(geo,color,opacity,y)=>{const o=this.mesh(geo,new THREE.MeshBasicMaterial({color,transparent:true,opacity,side:THREE.DoubleSide,depthWrite:false}),[0,y,0],this.fieldGroup);o.rotation.x=-Math.PI/2;o.castShadow=o.receiveShadow=false;o.visible=false;return o};
+    for(const [slot,num] of Object.entries(numbers)){
+      const role=slot==='P'?'pitcher':slot==='C'?'catcher':['BR','R1','R2','R3'].includes(slot)?'runner':'fielder';
+      const actor=this.player([0,0,0],role,num);actor.userData.slot=slot;actor.visible=false;
+      const pin=document.createElement('span');pin.className=`pin player-pin ${role==='runner'?'runner':''}`;this.labels.appendChild(pin);
+      this.fieldActors.set(slot,{actor,role,pin,last:null,shown:false,anchor:null,
+        ring:flat(new THREE.RingGeometry(.8,1.05,32),role==='runner'?'#ffae5c':'#7fd0ff',.9,.07),gap:flat(new THREE.RingGeometry(.5,1.2,28),'#b9c3c8',.35,.08)});
+    }
+    this.fieldBall=this.mesh(new THREE.SphereGeometry(BALL_RADIUS,16,10),new THREE.MeshBasicMaterial({color:'#fffaf0'}),[0,0,0],this.fieldGroup);this.fieldBall.visible=false;
+    // Halo is a viewing aid only; the physical radius stays 3.66 cm.
+    this.fieldBall.add(new THREE.Mesh(new THREE.SphereGeometry(.8,12,8),new THREE.MeshBasicMaterial({color:'#ffe08a',transparent:true,opacity:.35,depthWrite:false})));
+    // Broadcast-style ground shadow and drop line so the ball's height reads at stadium scale.
+    this.ballShadow=flat(new THREE.CircleGeometry(.7,20),'#1a2a1a',.45,.06);
+    this.ballDrop=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(0,1,0)]),new THREE.LineDashedMaterial({color:'#ffe08a',dashSize:.6,gapSize:.4,transparent:true,opacity:.8}));this.ballDrop.visible=false;this.fieldGroup.add(this.ballDrop);
+    this.predicted=new THREE.Group();this.fieldGroup.add(this.predicted);this.predicted.visible=false;
+    for(let i=0;i<12;i++){const arc=this.mesh(new THREE.RingGeometry(1.2,1.6,6,1,i*Math.PI/6,Math.PI/10),new THREE.MeshBasicMaterial({color:'#ffc86b',side:THREE.DoubleSide,transparent:true,opacity:.9,depthWrite:false}),[0,.09,0],this.predicted);arc.rotation.x=-Math.PI/2;arc.castShadow=false}
+    this.predictedPin=document.createElement('span');this.predictedPin.className='pin predicted-pin';this.predictedPin.textContent='預測落點 · 未發生';this.labels.appendChild(this.predictedPin);
+    this.fieldTrails=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.8}));this.fieldGroup.add(this.fieldTrails);
+  }
+  // state: scene-space player positions (null = unobserved), ball, predicted landing, trail segments.
+  updateFielding({players,ball,predicted,trails=[],roles={fielder:true,runner:true},showTrails=true}){
+    if(!this.fieldActors)return;
+    for(const p of players){
+      const f=this.fieldActors.get(p.slot);if(!f)continue;const shown=p.onField&&roles[f.role==='runner'?'runner':'fielder']!==false;
+      if(p.pos&&shown){
+        const y=p.slot==='P'&&Math.hypot(p.pos[0],p.pos[2]-PLATE.rubberZ)<2.5?.26:0;
+        f.actor.visible=f.ring.visible=true;f.actor.position.set(p.pos[0],y,p.pos[2]);f.ring.position.set(p.pos[0],.07,p.pos[2]);f.gap.visible=false;f.last=p.pos;
+        // Face the direction of travel and lean slightly forward when running.
+        if(!['pitcher','catcher'].includes(f.role)&&Number.isFinite(p.heading)){f.actor.rotation.order='YXZ';f.actor.rotation.set(-Math.min(.22,(p.speed||0)*.03),p.heading,0)}
+      }else{f.actor.visible=f.ring.visible=false;f.gap.visible=Boolean(shown&&f.last);if(f.last)f.gap.position.set(f.last[0],.08,f.last[2])}
+      f.shown=shown;f.anchor=p.pos??f.last;f.pin.textContent=p.label;f.pin.dataset.validity=p.validity;
+    }
+    this.fieldBall.visible=this.ballShadow.visible=this.ballDrop.visible=Boolean(ball);
+    if(ball){this.fieldBall.position.set(...ball);this.ballShadow.position.set(ball[0],.06,ball[2]);
+      this.ballDrop.position.set(ball[0],0,ball[2]);this.ballDrop.scale.set(1,Math.max(.01,ball[1]),1);this.ballDrop.computeLineDistances();this.ballDrop.visible=ball[1]>1.5}
+    this.predicted.visible=Boolean(predicted);if(predicted)this.predicted.position.set(predicted[0],0,predicted[2]);this.predictedAnchor=predicted;
+    const pos=[],col=[];if(showTrails)for(const [a,b,c] of trails){pos.push(...a,...b);col.push(...c,...c)}
+    this.fieldTrails.geometry.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));this.fieldTrails.geometry.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    this.fieldTrails.geometry.computeBoundingSphere();
   }
   setActorFilter(role,enabled){this.actorFilters[role]=Boolean(enabled);this.applyActorFilters()}
   setGhostOpacity(value){this.ghostOpacity=Math.max(.1,Math.min(.6,Number(value)||.25));this.applyActorFilters()}
@@ -169,13 +212,13 @@ export class FieldScene {
   }
   device(n){
     const g=new THREE.Group();g.position.set(...n.pos);g.lookAt(new THREE.Vector3(...n.target));this.root.add(g);
-    const c=colors[n.type],body=this.box(n.type==='edge'?.48:.28,n.type==='edge'?.64:.19,n.type==='edge'?.35:.42,c,[0,0,0],g);
+    const c=n.tier==='addon'?'#e39a4c':colors[n.type],body=this.box(n.type==='edge'?.48:.28,n.type==='edge'?.64:.19,n.type==='edge'?.35:.42,c,[0,0,0],g);
     body.material.roughness=.38;body.material.metalness=.25;body.userData.id=n.id;this.picks.push(body);n.body=body;
     if(n.type==='vendor'){
       this.box(.34,.34,.10,'#d4dfda',[0,0,.18],g);
       this.box(.24,.19,.015,'#1f4949',[0,.035,.239],g);
       const optic=this.mesh(new THREE.CircleGeometry(.026,16),this.material('#152a32'),[.10,-.105,.245],g);optic.userData.id=n.id;this.picks.push(optic);
-    }else if(n.type==='camera'||n.type==='spin'){
+    }else if(['camera','spin','player'].includes(n.type)){
       this.box(.32,.035,.49,'#adb9b5',[0,.115,.035],g);
       const lens=this.mesh(new THREE.CylinderGeometry(.068,.068,.2,20),this.material('#1b252e'),[0,0,.28],g);lens.rotation.x=Math.PI/2;
       this.mesh(new THREE.TorusGeometry(.067,.008,8,20),this.material('#6d838b'),[0,0,.385],g);
@@ -195,14 +238,19 @@ export class FieldScene {
     else{
       // Existing structure is schematic; all columns and brackets remain outside
       // the activity boundary. No sensor tripod or mast stands on the playing surface.
-      const [ax,ay,az]=n.anchor;
-      this.box(.24,ay+.45,.24,'#667d81',[ax,(ay+.45)/2,az]);
+      const [ax,ay,az]=n.anchor,tall=ay>5;
+      // Galvanised pole on a bolted base plate, with a ground-level junction box and conduit.
+      this.mesh(new THREE.CylinderGeometry(tall?.11:.08,tall?.15:.09,ay+.45,12),this.material('#7d8c8e'),[ax,(ay+.45)/2,az]);
+      this.box(.55,.05,.55,'#8a9696',[ax,.025,az]);
+      for(const dx of [-.2,.2])for(const dz of [-.2,.2])this.mesh(new THREE.CylinderGeometry(.018,.018,.06,6),this.material('#c8ccc4'),[ax+dx,.06,az+dz]);
+      this.box(.28,.36,.16,'#aeb8b2',[ax+.2,1.25,az]);
+      this.rod([ax+.12,1.1,az],[ax+.12,ay-.1,az],.018,'#394a4f');
       this.box(.45,.28,.14,'#869b9c',n.anchor);
       for(const dx of [-.16,.16])for(const dy of [-.085,.085])this.mesh(new THREE.SphereGeometry(.014,6,6),this.material('#d2d5c8'),[ax+dx,ay+dy,az+.078]);
       this.rod(n.anchor,n.pos,.036,'#bac4c2');
       this.line([[ax,.08,az],[ax,ay,az]],'#7dc5b6',this.root,.35);
       const o=new THREE.Vector3(...n.pos),t=new THREE.Vector3(...n.target),d=t.clone().sub(o),len=d.length();
-      if(n.type==='camera'||n.type==='spin'){
+      if(['camera','spin','player'].includes(n.type)){
         const right=new THREE.Vector3().crossVectors(d.clone().normalize(),new THREE.Vector3(0,1,0)).normalize(),up=new THREE.Vector3().crossVectors(right,d.clone().normalize()).normalize();
         const w=n.type==='spin'?(720*6.9e-6*len/(n.focalMm*.001))/2:Math.min(12,len*.24),h=w*.75,cs=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>t.clone().addScaledVector(right,w*a).addScaledVector(up,h*b));
         for(const p of cs)this.line([o.toArray(),p.toArray()],c,this.fovs,.35);this.line([...cs,cs[0]].map(v=>v.toArray()),c,this.fovs,.5);
@@ -221,7 +269,7 @@ export class FieldScene {
   }
   rebuild(stage,site,nodes){
     this.stage=stage;this.site=site;this.nodes=nodes;this.picks=[];this.clear(this.root);this.actors=[];this.clear(this.fovs);this.clear(this.clearanceGroup);this.labels.innerHTML='';
-    this.drawField();nodes.forEach(n=>this.device(n));
+    this.fieldActors=null;this.drawField();nodes.forEach(n=>this.device(n));if(stage==='full')this.buildFielding();
     const boundary=activityBoundary(stage),points=[...boundary,boundary[0]].map(([x,z])=>[x,.12,z]);
     this.line(points,'#85ffce',this.clearanceGroup);
     for(const n of nodes){
@@ -238,6 +286,7 @@ export class FieldScene {
     if(kind==='plate'){pos=[1.4,2.0,5.2];target=[0,.8,-1.7]}
     if(kind==='pitcher'){pos=[2,3,-21.5];target=[0,.8,-.2]}
     if(kind==='spin'){pos=[3.6,3.7,-12.3];target=[0,1.65,-16]}
+    if(kind==='field'){pos=[0,46,34];target=[0,0,-52]}
     this.controls.target.set(...target);this.camera.position.set(...pos);this.controls.update();
   }
   setPitch(pitch){
@@ -270,6 +319,16 @@ export class FieldScene {
       const overlap=placed.some(q=>Math.abs(q.x-x)<118&&Math.abs(q.y-y)<25);
       const visible=this.showLabels&&p.z<1&&p.z>-1&&x>35&&x<w-35&&y>16&&y<h-65&&!overlap;
       n.pin.style.display=visible?'block':'none';if(visible){n.pin.style.left=`${x}px`;n.pin.style.top=`${y}px`;placed.push({x,y})}
+    }
+    if(this.fieldActors){
+      const own=[],place=(pin,anchor,lift)=>{
+        if(!anchor||!this.showLabels){pin.style.display='none';return}
+        const p=new THREE.Vector3(anchor[0],anchor[1]+lift,anchor[2]).project(this.camera),x=(p.x*.5+.5)*w,y=(-p.y*.5+.5)*h;
+        const visible=p.z<1&&p.z>-1&&x>20&&x<w-20&&y>16&&y<h-65&&!own.some(q=>Math.abs(q.x-x)<62&&Math.abs(q.y-y)<17);
+        pin.style.display=visible?'block':'none';if(visible){pin.style.left=`${x}px`;pin.style.top=`${y}px`;own.push({x,y})}
+      };
+      for(const f of this.fieldActors.values())place(f.pin,f.shown?f.anchor:null,2.3);
+      place(this.predictedPin,this.predicted.visible?this.predictedAnchor:null,1.2);
     }
     this.sky.position.copy(this.camera.position);
     if(this.onFrame)this.onFrame(performance.now());this.renderer.render(this.scene,this.camera);

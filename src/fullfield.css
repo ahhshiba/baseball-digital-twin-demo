@@ -1,0 +1,59 @@
+/* Public presentation layer: scenes, equipment spec sheets, theory cards, fielding replay */
+.scene-tabs{display:flex;gap:4px;background:#0c1726;border:1px solid #2c445a;border-radius:10px;padding:3px}
+.scene-tabs button{border:0;background:transparent;color:#9fb8c4;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:600}
+.scene-tabs button.active{background:#f1c864;color:#162536}
+.app{grid-template-rows:74px minmax(0,1fr)}
+.scene-caption{max-width:260px}
+.scene-caption strong{font-size:16px}
+.panel-tabs{padding:0 12px}
+.panel-tabs button{flex:1;padding:14px 8px;font-size:14px}
+.node-group{margin-bottom:10px}
+.node-group .section-heading{margin:14px 0 6px}
+.spec-sheet{margin-top:16px}
+.type-chip{display:inline-block;margin:6px 0 2px;padding:2px 9px;border-radius:999px;border:1px solid #466579;color:#b9d0da;font-size:10px}
+.purpose{font-size:14px;line-height:1.65;color:#eef5f6;margin:10px 0 12px}
+.theory-action{margin-top:10px;border:1px solid #5f8196;background:#173449;color:#e7f1f3;border-radius:7px;padding:7px 11px;font-size:12px}
+.theory-action:hover{background:#21465f}
+.theory-list{display:grid;gap:12px;margin-top:14px}
+.theory-card{background:#12243a;border:1px solid #2f4c61;border-radius:12px;padding:14px 15px}
+.theory-card p{margin:8px 0 10px;font-size:13px;line-height:1.7;color:#c9d9df}
+.theory-head{display:flex;align-items:baseline;gap:9px}
+.theory-head span{font:500 11px 'DM Mono',monospace;color:#f0c774}
+.theory-head h3{margin:0;font-size:16px}
+.theory-card .latency-segments{margin:10px 0 0}
+.status-chip{display:inline-block;border-radius:999px;padding:1px 7px;font-size:10px;border:1px solid #c9a45a;color:#f5d58f;background:#3a2f18;white-space:nowrap}
+.scenario-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0 6px}
+.scenario-grid button{border:1px solid #3c5a6d;background:#12233a;color:#d4e3e8;border-radius:8px;padding:9px 6px;font-size:12px}
+.scenario-grid button.active{border-color:#7fd0ff;background:#1d3d56;color:#fff}
+.fielding-outcome{border-radius:9px;padding:10px 12px;margin:8px 0;border:1px dashed #c9a45a;background:#2b2618}
+.fielding-outcome.known{border-style:solid;border-color:#5f8fa6;background:#15304a}
+.fielding-outcome b{display:block;font-size:14px;color:#f4e2b6}
+.fielding-outcome span{font-size:12px;color:#c3d3da;line-height:1.5}
+.fielding-filters{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:#c9d9df;margin:8px 0}
+.fielding-filters label{display:flex;align-items:center;gap:5px}
+.event-list{margin:6px 0 20px;padding-left:20px;font-size:12px;color:#cfdde2}
+.event-list li{margin:4px 0}.event-list small{margin-left:6px;color:#8ea8b4}
+.event-list .empty{list-style:none;margin-left:-20px;color:#8ea8b4}
+.field-timeline{position:absolute;left:15px;right:15px;bottom:64px;display:flex;align-items:center;gap:6px;padding:7px 10px;background:#102839ec;border:1px solid #4d7488;border-radius:10px;z-index:2}
+.field-timeline button{border:1px solid #4d7488;background:#173449;color:#eaf4f6;border-radius:6px;min-width:32px;height:30px;font-size:12px}
+.timeline-track{position:relative;flex:1;min-width:0}
+.timeline-track input{width:100%;accent-color:#f1c864}
+.field-ticks{position:absolute;left:0;right:0;top:-5px;height:6px;pointer-events:none}
+.field-ticks i{position:absolute;width:2px;height:7px;background:#7fd0ff;transform:translateX(-1px)}
+.field-ticks i.review,.field-ticks i.provisional{background:#f1c864}
+.field-timeline span{font:500 11px 'DM Mono',monospace;color:#cfe0e6;white-space:nowrap;min-width:48px;text-align:right}
+.app[data-stage=full] .live-strip{display:none}
+.pin.player-pin{font-size:9px;padding:2px 5px;border-color:#5aa5d6;background:#0f2438d9;pointer-events:none}
+.pin.player-pin.runner{border-color:#e89a4a}
+.pin.player-pin[data-validity=ambiguous]{border-color:#e27b6c;color:#ffc2b7}
+.pin.player-pin[data-validity=occluded]{border-style:dashed;color:#b8c4ca}
+.pin.predicted-pin{border:1px dashed #ffc86b;color:#ffe2a8;background:#2b2618d9;pointer-events:none}
+@media(max-width:960px){.app{grid-template-rows:auto auto}.topbar{flex-wrap:wrap;padding:10px 14px;gap:10px}.scene-tabs{order:3;width:100%}.scene-tabs button{flex:1;padding:8px 6px}}
+@media(max-width:600px){
+  .scenario-grid{grid-template-columns:repeat(2,1fr)}
+  .field-timeline{left:8px;right:8px;bottom:60px;padding:5px 6px}
+  .header-note{display:none}
+  .toolbar{display:flex;flex-wrap:nowrap;overflow-x:auto;left:8px;right:8px;bottom:10px;max-width:none;scrollbar-width:none}
+  .toolbar button{flex:none;width:auto;padding:8px 11px}
+}
+.app:not([data-stage=full]) .full-only,.app[data-stage=full] .near-only{display:none}
