@@ -56,7 +56,7 @@ export const buyStages = [
 export function parsePlanHash(hash){
   const parts=hash.replace(/^#/,'').split('/');
   const variant=['build','buy'].includes(parts[0])?parts.shift():'build';
-  return {variant,stage:['poc','bullpen','pilot','full'].includes(parts[0])?parts[0]:'poc',panel:['dashboard','nodes','spin','plan','metrics','flow'].includes(parts[1])?parts[1]:'nodes'};
+  return {variant,stage:['poc','bullpen','pilot','full'].includes(parts[0])?parts[0]:'poc',panel:['dashboard','nodes','fullfield','spin','plan','metrics','flow'].includes(parts[1])?parts[1]:'nodes'};
 }
 export function getPurchaseNodes(stage){
   if(!buyStages.some(s=>s.id===stage))throw new RangeError('Unknown purchase stage');

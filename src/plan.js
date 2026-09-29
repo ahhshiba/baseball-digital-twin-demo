@@ -1,7 +1,10 @@
 // Public planning estimates from 2026-09-28 v3.0, not measured performance.
-export const PLAN = Object.freeze({version:'3.1', date:'2026-09-28', updated:'2026-09-29', priceChecked:'2026-09-29', latencyMs:800,
+export const PLAN = Object.freeze({version:'4.2', date:'2026-09-29', updated:'2026-09-29', priceChecked:'2026-09-29', latencyMs:800,
   directSpinRequired:true, source:'public-planning-summary', fxUsdTwd:32});
 export const sources = {
+  fieldCamera:{title:'Basler a2A2048-114g5cBAS 原廠規格',url:'https://docs.baslerweb.com/a2a2048-114g5cbas'},
+  fieldCamera5mp:{title:'Basler a2A2448-105g5cBAS 原廠規格',url:'https://docs.baslerweb.com/a2a2448-105g5cbas'},
+  fieldCameraPrice:{title:'Graftek 公開參考價（查核日 2026-09-29）',url:'https://graftek.com/product/a2a2048-114g5cbas/'},
   basler:{title:'Basler 原廠規格',url:'https://docs.baslerweb.com/a2a1920-160umbas'},
   baslerPrice:{title:'Soda Vision · USD 395',url:'https://www.sodavision.com/product/basler-a2a1920-160umbas/'},
   spin:{title:'FLIR 幀率 / 曝光表',url:'https://softwareservices.flir.com/BFS-U3-04S2/latest/Model/spec.html'},
@@ -43,7 +46,7 @@ export function budgetTotals(){
   return {low,high,reserveLow:Math.round(low*.15),reserveHigh:Math.round(high*.15),totalLow:Math.round(low*1.15),totalHigh:Math.round(high*1.15)};
 }
 export const bullpenBudget = [['沿用完整 PoC（保守取整）',220000],['Edge PC / 儲存介面',55000],['旋轉光學 / 光源改善',40000],['局部網路 / 固定防護',40000],['必要備品',35000],['校正 / 重裝驗證',15000],['升級 / 未知風險預留',65000]];
-export const expansionBudget = [['沿用牛棚',470000],['場邊感測擴充',250000],['60GHz 研究',50000],['運算 / 儲存',70000],['網路 / 防護',60000],['風險保留',100000]];
+export const expansionBudget = [['牛棚主線累計（含原風險）',470000],['6台人物相機（借用／25k預留）',150000],['人物鏡頭增量（6×7k）',42000],['分區edge增量（GPU需借用）',70000],['可拆網路／光纖配件',60000],['場外支架／防護／配電',60000],['事件儲存增量（NAS需借用）',50000],['同步／校正增量',30000],['研究風險餘額',68000]];
 export const latency = [
   {name:'必要觀測窗',ms:205,color:'#b39bf2',detail:'從最早納入的取樣算起，含多幀與事件窗等待'},
   {name:'讀出 / USB',ms:50,color:'#689ff2',detail:'擷取完成 → 主機 buffer 可用'},

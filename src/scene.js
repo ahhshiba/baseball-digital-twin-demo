@@ -134,7 +134,10 @@ export class FieldScene {
         for(let col=0;col<8;col++)for(let row=0;row<2;row++){const bulbs=this.box(.43,.48,.08,'#fff6d7',[x-2+col*.57,28.65+row*.72,z+.28]);bulbs.material.emissive=new THREE.Color('#fff0c9');bulbs.material.emissiveIntensity=1.2}
       }
       this.net([-9,5],[9,5],5);this.net([-9,5],[-15,-4],5);this.net([9,5],[15,-4],5);
-      if(this.stage==='full')for(const [i,x,z] of [[3,18,-23],[4,11,-35],[5,-19,-24],[6,-12,-34],[7,-36,-66],[8,0,-84],[9,36,-66]])this.player([x,0,z],'fielder',i);
+      if(isField){
+        const defenders=[[18,22],[12,38],[-12,38],[-20,22],[-43,72],[0,94],[43,72]];
+        defenders.forEach(([x,z],i)=>this.player([x,0,z],'fielder',i+1));
+      }
     }else{
       this.patch([[-10,7],[10,7],[10,-24],[-10,-24]],lab?'#b2b8b5':'#657c59',-.04);
       this.patch([[-3,4],[3,4],[3,-21],[-3,-21]],'#6b915a',0,this.grass);

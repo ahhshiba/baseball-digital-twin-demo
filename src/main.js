@@ -10,10 +10,11 @@ import { opticsEstimate, observationGeometry, syntheticAxes, toWorld } from './o
 import { stages, colors, typeNames, getNodes } from './nodes.js';
 import { PITCHES, PLATE, BALL_RADIUS, makePitch, makeRecord } from './pitch.js';
 import { capabilityHTML } from './capabilities.js';
+import { fullFieldHTML, setupFullFieldPanel } from './fullfield.js';
 import { FieldScene } from './scene.js';
 
 const $=s=>document.querySelector(s);
-const panels=['dashboard','nodes','spin','plan','metrics','flow'];
+const panels=['dashboard','nodes','fullfield','spin','plan','metrics','flow'];
 const requested=parsePlanHash(location.hash);
 let variant=requested.variant,stage=requested.stage,site='pen',nearView=false,selected='cam-c',activePanel=requested.panel;
 const options={fpga:false,radar60:false};
@@ -41,7 +42,7 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
     <div class="simulation" id="simulation" hidden><span>慢速回放</span><div class="progress"><div id="progress-fill"></div></div><b id="sim-event">釋球</b></div>
     <div class="toolbar"><button id="play" class="primary">▶ 投一球並記錄</button><button data-view="angle">全景</button><button data-view="plate">本壘近景</button><button data-view="pitcher">投手視角</button><button data-view="top">俯視</button><button data-view="side">側視</button></div>
   </section><aside class="panel"><div class="panel-tabs" role="tablist" aria-label="資料面板">
-    <button data-panel="dashboard" role="tab">投球 / ABS</button><button data-panel="nodes" role="tab">設備配置</button><button data-panel="spin" role="tab">直接旋轉</button><button data-panel="plan" role="tab">計畫 / 預算</button><button data-panel="metrics" role="tab">數據能力</button><button data-panel="flow" role="tab">0.8秒流程</button>
+    <button data-panel="dashboard" role="tab">投球 / ABS</button><button data-panel="nodes" role="tab">設備配置</button><button data-panel="fullfield" role="tab">全場追蹤</button><button data-panel="spin" role="tab">直接旋轉</button><button data-panel="plan" role="tab">計畫 / 預算</button><button data-panel="metrics" role="tab">數據能力</button><button data-panel="flow" role="tab">0.8秒流程</button>
   </div><div class="panel-scroll"><div id="stage-brief" class="stage-brief"></div>
     <section id="dashboard-panel"><span class="eyebrow">PITCH WORKBENCH</span><h2>一球，從釋球到進壘</h2><p class="lead">切換球路與邊界情境，檢視模擬球路、量測欄位與判讀結果。</p>
       <div class="pitch-types">${Object.entries(PITCHES).map(([id,p])=>`<button data-pitch="${id}" style="--pitch-color:${p.color}"><b>${id}</b><span>${p.name}</span></button>`).join('')}</div>
@@ -54,6 +55,7 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
       <div class="export-row"><button id="export-json">匯出 JSON</button><button id="export-csv">匯出 CSV</button></div><p class="mini-note" id="storage-note"></p>
     </section>
     <section id="nodes-panel" hidden><span class="eyebrow" id="phase-tag"></span><h2 id="phase-name"></h2><p class="lead" id="phase-desc"></p><div class="stage-extras"><label><input id="option-fpga" type="checkbox">FPGA 平行研發</label><label><input id="option-radar60" type="checkbox">60GHz ADC 選配</label></div><p class="optional-note" id="optional-note"></p><div class="disclaimer">場內淨空：相機、雷達、機櫃與固定支架均配置於示意活動區外；界外區也可能是球員活動區。支架代表待場勘確認的剛性結構，不能固定在柔性網面。線材沿場外線槽，避免跨越動線。<br>點「活動區界線」查看範圍；綠色圓環為設備投影示意，不是核准安全距離。</div><div class="section-heading"><span>場景節點</span><small id="node-count"></small></div><div id="node-list"></div><article id="detail" class="detail"></article></section>
+    <section id="fullfield-panel" hidden>${fullFieldHTML()}</section>
     <section id="metrics-panel" hidden><p id="metrics-variant" class="disclaimer"></p>${capabilityHTML()}</section>
     <section id="spin-panel" hidden><div data-version-content="build">${spinHTML()}</div><div data-version-content="buy" hidden>${buySpinHTML()}</div></section>
     <section id="plan-panel" hidden><div data-version-content="build">${planHTML()}</div><div data-version-content="buy" hidden>${buyPlanHTML()}</div></section>
@@ -61,6 +63,7 @@ $('#app').innerHTML=`<div class="app" data-plan-version="${PLAN.version}" data-v
   </div><div class="panel-foot">v${PLAN.version} · ${PLAN.priceChecked}價格查核 · 未連感測器 / 非正式ABS</div></aside></div></div>`;
 
 const field=new FieldScene($('#scene'),$('#labels'),id=>{selected=id;field.select(id);updateDetail();setPanel('nodes')});
+setupFullFieldPanel();
 function setPanel(name){
   if(!panels.includes(name))return;activePanel=name;
   document.querySelectorAll('[data-panel]').forEach(b=>{const active=b.dataset.panel===name;b.classList.toggle('active',active);b.setAttribute('aria-selected',active);b.tabIndex=active?0:-1;b.id='tab-'+b.dataset.panel;b.setAttribute('aria-controls',b.dataset.panel+'-panel')});
@@ -108,9 +111,9 @@ function renderStage(){
   document.querySelectorAll('[data-site]').forEach(b=>{b.classList.toggle('active',b.dataset.site===site);b.onclick=()=>{stopPlayback();site=b.dataset.site;renderStage()}});
   document.querySelectorAll('[data-scene]').forEach(b=>{b.onclick=()=>{nearView=b.dataset.scene==='near';field.setView(nearView?'spin':'plate')}});
   $('#scene-title').textContent=buying?info.subtitle:stage==='poc'?`${site==='lab'?'室內':'牛棚'} · 一期直接旋轉 PoC`:info.subtitle;
-  $('#stage-brief').innerHTML=`<small>PLAN v${PLAN.version} / ${buying?'B成品':'A自研'} / ${info.short} / ${info.timing}</small><strong>${info.budget}</strong><p>${buying?'B1公開feed約iPad後3秒目標 · 非800ms · 不是raw':'直接旋轉一期必驗 · 工程預留非報價 · 尚未實測'}</p>`;
+  $('#stage-brief').innerHTML=`<small>PLAN v${PLAN.version} / ${buying?'B成品':'A自研'} / ${info.short} / ${info.timing}</small><strong>${info.budget}</strong><p>${buying?'B1公開feed約iPad後3秒目標 · 非800ms · 不是raw':stage==='poc'||stage==='bullpen'?'直接旋轉一期必驗 · 工程預留非報價 · 尚未實測':'全場球員／守備研究 · 合成展示 · 尚未實測'}</p>`;
   $('#phase-tag').textContent=`${info.short} / ${buying?'BUY & INTEGRATE':'OPEN SENSORS'}`;$('#phase-name').textContent=info.name;$('#phase-desc').textContent=info.description;
-  $('#optional-note').textContent=buying?'此場景僅B1安裝概念；Rapsodo投捕間部署與場內淨空衝突，未放入本版3D配置。FPGA不能解鎖成品raw或縮短其雲端等待。':options.fpga||options.radar60?'選配僅顯示研究位置，未加進一期BOM。60GHz另預留3–6萬；牛棚47萬全用滿時可能超過50萬。':'主案未啟用FPGA / 60GHz。先CPU完成量測，以實測瓶頸決定加速。';
+  $('#optional-note').textContent=buying?'此場景僅B1安裝概念；Rapsodo投捕間部署與場內淨空衝突，未放入本版3D配置。FPGA不能解鎖成品raw或縮短其雲端等待。':stage==='pilot'||stage==='full'?'全場節點F01–F08是場外候選站；6站先導、8站追加。人物相機不自動等於遠端球縫可用，覆蓋、焦段、同步與安全仍待現場驗證。':options.fpga||options.radar60?'選配僅顯示研究位置，未加進一期BOM。60GHz另預留3–6萬；牛棚47萬全用滿時可能超過50萬。':'主案未啟用FPGA / 60GHz。先CPU完成量測，以實測瓶頸決定加速。';
   nodes=activeNodes();if(!nodes.some(n=>n.id===selected))selected=nodes[0].id;
   const sensorCount=nodes.filter(n=>['camera','spin','radar24','radar60','vendor'].includes(n.type)).length;
   $('#node-count').textContent=buying?'1 整合式量測系統 / 1 應用節點':`${sensorCount} 感測來源 / ${nodes.length} 設備盒體`;
