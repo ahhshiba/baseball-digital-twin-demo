@@ -31,3 +31,6 @@ M0 Demo（本 repo）→ P0 G1 借測 → P1 W4–12 PoC → P2 W13–20 牛棚�
 
 ## 資料
 `npm run export-data` 產生 `data/`：requirements、fullfield_plan、fullfield_placements、fullfield_benchmark.csv、metrics_catalog（90 項）、statcast_claim_audit（15 項）、synthetic_pitches（32 球 × 241 點）、synthetic_fielding（6 play × 121 時間片 × 13 人）。合成資料不是訓練集或實測；實測欄位全為 `null`。
+
+## 單鏡輔助層
+`tools/monocular/`（Python，不打包進網站）：一支手機或單台相機的影片 → 待覆核事件候選（標註加速），以及單鏡估計 vs 參考值的對照 benchmark。只做輔助，`counts_toward_acceptance = false`。合成測試結果：側面視角球速 P95 約 3–4 km/h、進壘高度 P95 ≤ 2.2 cm；本壘後方與高處視角不適合投球指標；皆未達一期多相機目標（1 km/h、20 mm）。詳見該資料夾 README。
